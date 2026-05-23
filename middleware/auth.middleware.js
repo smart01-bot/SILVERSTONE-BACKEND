@@ -1,10 +1,18 @@
 import jwt from 'jsonwebtoken';
 
+// Supports both httpOnly cookie (web dashboard) and Bearer token (mobile app)
 const auth = (restrictToAdmin = false) => {
   return (req, res, next) => {
-    const token = req.cookies.accessToken;
-    
-    if(!token) {
+    let token = req.cookies?.accessToken;
+
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7);
+      }
+    }
+
+    if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
@@ -18,9 +26,9 @@ const auth = (restrictToAdmin = false) => {
 
       next();
     } catch (err) {
-      res.status(401).json({ error: "Invalid token" })
+      res.status(401).json({ error: 'Invalid token' });
     }
-  }
-}
+  };
+};
 
 export default auth;
