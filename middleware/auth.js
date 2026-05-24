@@ -2,9 +2,17 @@ import jwt from 'jsonwebtoken';
 
 const auth = (restrictToAdmin = false) => {
   return (req, res, next) => {
-    const token = req.cookies.accessToken;
-    
-    if(!token) {
+    // Accept cookie (web dashboard) OR Authorization: Bearer <token> (mobile)
+    let token = req.cookies?.accessToken;
+
+    if (!token) {
+      const authHeader = req.headers['authorization'];
+      if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7);
+      }
+    }
+
+    if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
@@ -18,9 +26,9 @@ const auth = (restrictToAdmin = false) => {
 
       next();
     } catch (err) {
-      res.status(401).json({ error: "Invalid token" })
+      res.status(401).json({ error: 'Invalid token' });
     }
-  }
-}
+  };
+};
 
 export default auth;
