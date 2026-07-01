@@ -41,3 +41,18 @@ ALTER TABLE requests
 ALTER TABLE requests
   ADD CONSTRAINT requests_status_check
   CHECK (status IN ('pending','approved','rejected','completed','cancelled'));
+
+-- ============================================================
+-- Migration 002 -- rejection reason + selfie document URL
+-- Run this section only; everything above has already been applied.
+-- ============================================================
+
+-- Agents: capture why an application was rejected (was collected in the
+-- app but had no column to land in, so it was silently discarded)
+ALTER TABLE agents
+  ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+
+-- Agents: store the actual selfie image URL, not just a verified flag.
+-- Mirrors how tin_cert_url / licence_cert_url already work.
+ALTER TABLE agents
+  ADD COLUMN IF NOT EXISTS selfie_url TEXT;

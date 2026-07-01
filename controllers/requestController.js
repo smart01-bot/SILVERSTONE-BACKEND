@@ -1,16 +1,19 @@
 import { createRequest, deleteRequestData, getAllRequestsData, getRequestById, updateRequestData } from '../models/request.js';
 import { addToQueue, getQueuePosition } from '../services/queueService.js';
 import { check, validationResult } from 'express-validator';
+import { NETWORKS, REQUEST_STATUSES } from '../utils/constants.js';
 
 const submitRequest = async (req, res, next) => {
   try {
-    const { subAgentId, subagent_name, requested_network, source_network, requested_phoneNumber, source_phoneNumber, amount, urgency = false } = req.body;
+    // Derived from the verified JWT, never from client input -- a sub-agent
+    // must not be able to submit a request tagged under a different agent's ID.
+    const subAgentId = req.user.id;
+    const { subagent_name, requested_network, source_network, requested_phoneNumber, source_phoneNumber, amount, urgency = false } = req.body;
 
     await Promise.all([
-      check('subAgentId').isUUID().run(req),
       check('subagent_name').isString().notEmpty().run(req),
-      check('requested_network').isString().isIn(['Vodacom', 'Airtel', 'Halotel', 'Yas']).run(req),
-      check('source_network').optional().isString().isIn(['Vodacom', 'Airtel', 'Halotel', 'Yas']).run(req),
+      check('requested_network').isString().isIn(NETWORKS).run(req),
+      check('source_network').optional().isString().isIn(NETWORKS).run(req),
       check('requested_phoneNumber').isString().notEmpty().run(req),
       check('source_phoneNumber').optional().isString().run(req),
       check('amount').isFloat({ min: 0 }).run(req),
@@ -69,13 +72,13 @@ const updateRequest = async (req, res, next) => {
     await Promise.all([
       check('id').isUUID().run(req),
       check('subagent_name').optional().isString().notEmpty().run(req),
-      check('requested_network').optional().isString().isIn(['Vodacom', 'Airtel', 'Halotel']).run(req),
-      check('source_network').optional().isString().isIn(['Vodacom', 'Airtel', 'Halotel']).run(req),
+      check('requested_network').optional().isString().isIn(NETWORKS).run(req),
+      check('source_network').optional().isString().isIn(NETWORKS).run(req),
       check('requested_phoneNumber').optional().isString().run(req),
       check('source_phoneNumber').optional().isString().run(req),
       check('amount').optional().isFloat({ min: 0 }).run(req),
       check('urgency').optional().isBoolean().run(req),
-      check('status').optional().isIn(['pending', 'approved', 'rejected', 'completed']).run(req),
+      check('status').optional().isIn(REQUEST_STATUSES).run(req),
     ]);
 
     const errors = validationResult(req);
