@@ -56,6 +56,7 @@ const updateAgent = async (req, res, next) => {
       tinCertUrl:        'tin_cert_url',
       licenceCertUrl:    'licence_cert_url',
       selfieVerified:    'selfie_verified',
+      selfieUrl:         'selfie_url',
       pinSet:            'pin_set',
     };
     for (const [camel, snake] of Object.entries(camelToSnake)) {

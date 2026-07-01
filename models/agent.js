@@ -6,7 +6,7 @@ const createAgent = async (
   networks, agentPhoneNumbers, role, passwordHash,
   businessName, businessLocation, coordinates,
   regNo, tin, nida, floatCapacity,
-  tinCertUrl, licenceCertUrl, selfieVerified
+  tinCertUrl, licenceCertUrl, selfieVerified, selfieUrl
 ) => {
   if (!ROLES.includes(role)) {
     return Promise.reject({ status: 400, message: 'Invalid role' });
@@ -26,18 +26,18 @@ const createAgent = async (
        status, pin_set,
        business_name, business_location, coordinates,
        reg_no, tin, nida, float_capacity,
-       tin_cert_url, licence_cert_url, selfie_verified
+       tin_cert_url, licence_cert_url, selfie_verified, selfie_url
      ) VALUES (
        $1,$2,$3,$4,$5,$6,$7,$8,
        'pending', FALSE,
-       $9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+       $9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
      ) RETURNING *`,
     [
       username, name ?? username, email, phone,
       networks, agentPhoneNumbers, role, passwordHash,
       businessName, businessLocation, coordinates,
       regNo, tin, nida, floatCapacity ?? 0,
-      tinCertUrl, licenceCertUrl, selfieVerified ?? false,
+      tinCertUrl, licenceCertUrl, selfieVerified ?? false, selfieUrl ?? null,
     ]
   );
 };
@@ -54,7 +54,8 @@ const updateAgentData = async (id, fields) => {
     'role','passwordhash','status','pin_set',
     'business_name','business_location','coordinates',
     'reg_no','tin','nida','float_capacity',
-    'tin_cert_url','licence_cert_url','selfie_verified',
+    'tin_cert_url','licence_cert_url','selfie_verified','selfie_url',
+    'rejection_reason',
   ];
 
   const updates = [];

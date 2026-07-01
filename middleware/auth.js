@@ -1,8 +1,11 @@
 import jwt from 'jsonwebtoken';
 
-const auth = (restrictToAdmin = false) => {
+// Supports both httpOnly cookie (web dashboard) and Bearer token (mobile app).
+// restrictToMainAgent=true gates a route to main agents only (approvals,
+// dashboards, analytics, agent management, etc). Sub-agents and main agents
+// are the only two roles in this system — there is no 'admin' role.
+const auth = (restrictToMainAgent = false) => {
   return (req, res, next) => {
-    // Accept cookie (web dashboard) OR Authorization: Bearer <token> (mobile)
     let token = req.cookies?.accessToken;
 
     if (!token) {
@@ -20,8 +23,8 @@ const auth = (restrictToAdmin = false) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = decoded;
 
-      if (restrictToAdmin && decoded.role !== 'admin') {
-        return res.status(403).json({ error: 'Admin access required' });
+      if (restrictToMainAgent && decoded.role !== 'main-agent') {
+        return res.status(403).json({ error: 'Main agent access required' });
       }
 
       next();

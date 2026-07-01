@@ -2,10 +2,10 @@ import supertest from 'supertest';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
-import app from '../src/index.js';
-import db from '../src/config/database.js';
-import redis from '../src/config/redis.js';
-import { createAgent, getAgentByPhone } from '../src/models/agent.js';
+import app from '../index.js';
+import db from '../config/database.js';
+import redis from '../config/redis.js';
+import { createAgent } from '../models/agent.js';
 
 const request = supertest(createServer(app));
 
@@ -25,11 +25,13 @@ describe('Authentication', () => {
   describe('POST /api/auth/register', () => {
     it('should register a new agent', async () => {
       const response = await request.post('/api/auth/register').send({
+        username: 'testagent',
         name: 'Test Agent',
+        email: 'testagent@example.com',
         phone: '1234567890',
-        network: 'Vodacom',
-        role: 'sub-agent',
         password: 'securepassword',
+        role: 'sub-agent',
+        networks: ['Vodacom'],
       });
       expect(response.status).toBe(201);
       expect(response.body.agent).toHaveProperty('id');
@@ -38,25 +40,33 @@ describe('Authentication', () => {
     });
 
     it('should fail with duplicate phone', async () => {
-      await createAgent('Test Agent', '1234567890', 'Vodacom', 'sub-agent', await bcrypt.hash('password', 10));
+      await createAgent(
+        'existingagent', 'Existing Agent', 'existingagent@example.com', '1234567890',
+        ['Vodacom'], [], 'sub-agent', await bcrypt.hash('password', 10),
+        null, null, null, null, null, null, 0, null, null, false
+      );
       const response = await request.post('/api/auth/register').send({
+        username: 'anotheragent',
         name: 'Another Agent',
+        email: 'anotheragent@example.com',
         phone: '1234567890',
-        network: 'Vodacom',
-        role: 'sub-agent',
         password: 'securepassword',
+        role: 'sub-agent',
+        networks: ['Vodacom'],
       });
-      expect(response.status).toBe(500);
-      expect(response.body.error).toBe('Internal server error'); // Update error handling for specific messages if needed
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe('Phone number already registered');
     });
 
     it('should fail with invalid role', async () => {
       const response = await request.post('/api/auth/register').send({
+        username: 'testagent2',
         name: 'Test Agent',
+        email: 'testagent2@example.com',
         phone: '9876543210',
-        network: 'Vodacom',
-        role: 'invalid',
         password: 'securepassword',
+        role: 'invalid',
+        networks: ['Vodacom'],
       });
       expect(response.status).toBe(400);
       expect(response.body.errors).toBeDefined();
@@ -66,12 +76,16 @@ describe('Authentication', () => {
   describe('POST /api/auth/login', () => {
     beforeEach(async () => {
       await db.none('DELETE FROM agents');
-      await createAgent('Test Agent', '1234567890', 'Vodacom', 'sub-agent', await bcrypt.hash('securepassword', 10));
+      await createAgent(
+        'loginagent', 'Test Agent', 'loginagent@example.com', '1234567890',
+        ['Vodacom'], [], 'sub-agent', await bcrypt.hash('securepassword', 10),
+        null, null, null, null, null, null, 0, null, null, false
+      );
     });
 
     it('should login with valid credentials', async () => {
       const response = await request.post('/api/auth/login').send({
-        phone: '1234567890',
+        email: 'loginagent@example.com',
         password: 'securepassword',
       });
       expect(response.status).toBe(200);
@@ -82,7 +96,7 @@ describe('Authentication', () => {
 
     it('should fail with invalid credentials', async () => {
       const response = await request.post('/api/auth/login').send({
-        phone: '1234567890',
+        email: 'loginagent@example.com',
         password: 'wrongpassword',
       });
       expect(response.status).toBe(401);
@@ -92,7 +106,7 @@ describe('Authentication', () => {
     it('should fail with missing credentials', async () => {
       const response = await request.post('/api/auth/login').send({});
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Phone and password required');
+      expect(response.body.errors).toBeDefined();
     });
   });
 });

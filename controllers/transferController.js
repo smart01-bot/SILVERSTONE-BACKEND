@@ -1,6 +1,7 @@
 import { check, validationResult } from 'express-validator';
 import { processTransfer } from '../services/transferService.js';
 import { deleteTransaction, getAllTransactions, getTransactionById, updateTransaction } from '../models/transaction.js';
+import { NETWORKS } from '../utils/constants.js';
 
 const handleTransfer = async (req, res, next) => {
   try {
@@ -55,8 +56,8 @@ const updateTransfer = async (req, res, next) => {
     await Promise.all([
       check('id').isUUID().run(req),
       check('amount').optional().isFloat({ min: 0 }).run(req),
-      check('source_network').optional().isString().isIn(['Vodacom', 'Tigo', 'Halotel']).run(req),
-      check('destination_network').optional().isString().isIn(['Vodacom', 'Tigo', 'Halotel']).run(req),
+      check('source_network').optional().isString().isIn(NETWORKS).run(req),
+      check('destination_network').optional().isString().isIn(NETWORKS).run(req),
       check('destination_phoneNumber').optional().isString().run(req),
       check('source_phoneNumber').optional().isString().run(req),
       check('status').optional().isIn(['pending', 'completed', 'rejected']).run(req),

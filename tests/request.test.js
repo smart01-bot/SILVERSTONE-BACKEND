@@ -1,23 +1,28 @@
 import supertest from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
-import app from '../src/index.js';
-import db from '../src/config/database.js';
-import redis from '../src/config/redis.js';
-import { createAgent } from '../src/models/agent.js';
-import { createRequest } from '../src/models/request.js';
+import app from '../index.js';
+import db from '../config/database.js';
+import redis from '../config/redis.js';
+import { createAgent } from '../models/agent.js';
 import bcrypt from 'bcrypt';
 
 const request = supertest(createServer(app));
 
 describe('Float Request Submission', () => {
   let token;
+  let agentId;
 
   beforeAll(async () => {
     await db.none('DELETE FROM requests');
     await db.none('DELETE FROM agents');
     await redis.flushAll();
-    const agent = await createAgent('Test Agent', '1234567890', 'Vodacom', 'sub-agent', await bcrypt.hash('password', 10));
+    const agent = await createAgent(
+      'requestagent', 'Test Agent', 'requestagent@example.com', '1234567890',
+      ['Vodacom'], [], 'sub-agent', await bcrypt.hash('password', 10),
+      null, null, null, null, null, null, 0, null, null, false
+    );
+    agentId = agent.id;
     token = jwt.sign({ id: agent.id, role: 'sub-agent' }, process.env.JWT_SECRET, { expiresIn: '1h' });
   });
 
@@ -34,9 +39,12 @@ describe('Float Request Submission', () => {
       const response = await request.post('/api/requests/submit')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          subAgentId: 1,
-          requestedNetwork: 'Vodacom',
-          sourceNetwork: 'Tigo',
+          subAgentId: agentId,
+          subagent_name: 'Test Agent',
+          requested_network: 'Vodacom',
+          source_network: 'Airtel',
+          requested_phoneNumber: '1234567890',
+          source_phoneNumber: '0987654321',
           amount: 100000,
           urgency: true,
         });
@@ -49,9 +57,12 @@ describe('Float Request Submission', () => {
       const response = await request.post('/api/requests/submit')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          subAgentId: 1,
-          requestedNetwork: 'Invalid',
+          subAgentId: agentId,
+          subagent_name: 'Test Agent',
+          requested_network: 'Invalid',
+          requested_phoneNumber: '1234567890',
           amount: -100,
+          urgency: true,
         });
       expect(response.status).toBe(400);
       expect(response.body.errors).toBeDefined();
@@ -61,9 +72,12 @@ describe('Float Request Submission', () => {
       const response = await request.post('/api/requests/submit')
         .set('Authorization', 'Bearer invalidtoken')
         .send({
-          subAgentId: 1,
-          requestedNetwork: 'Vodacom',
+          subAgentId: agentId,
+          subagent_name: 'Test Agent',
+          requested_network: 'Vodacom',
+          requested_phoneNumber: '1234567890',
           amount: 100000,
+          urgency: false,
         });
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('Invalid token');
