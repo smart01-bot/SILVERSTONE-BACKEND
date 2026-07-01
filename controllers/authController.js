@@ -6,10 +6,15 @@ import { check, validationResult } from 'express-validator';
 import { createAgent, getAgentByEmail, getAgent } from '../models/agent.js';
 import { ROLES, NETWORKS } from '../utils/constants.js';
 
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// sameSite: 'none' requires secure: true -- browsers reject that cookie
+// outright otherwise. Use 'lax' + non-secure for local/dev (http), and
+// 'none' + secure for production (https, cross-site dashboard).
 const COOKIE_OPTS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'none',
+  secure: IS_PROD,
+  sameSite: IS_PROD ? 'none' : 'lax',
   maxAge: 24 * 60 * 60 * 1000,
 };
 
@@ -60,7 +65,7 @@ const register = async (req, res, next) => {
       role = 'sub-agent',
       businessName, businessLocation, coordinates,
       regNo, tin, nida, floatCapacity,
-      tinCertUrl, licenceCertUrl, selfieVerified = false,
+      tinCertUrl, licenceCertUrl, selfieVerified = false, selfieUrl,
     } = req.body;
 
     await Promise.all([
@@ -80,7 +85,7 @@ const register = async (req, res, next) => {
       networks, agentPhoneNumbers, role, passwordHash,
       businessName, businessLocation, coordinates,
       regNo, tin, nida, floatCapacity,
-      tinCertUrl, licenceCertUrl, selfieVerified
+      tinCertUrl, licenceCertUrl, selfieVerified, selfieUrl
     );
 
     const token = makeToken(agent, '12h');
@@ -181,7 +186,7 @@ const setPin = async (req, res, next) => {
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────
 const logout = async (req, res) => {
-  res.clearCookie('accessToken', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.clearCookie('accessToken', { httpOnly: true, secure: IS_PROD, sameSite: IS_PROD ? 'none' : 'lax' });
   res.status(200).json({ message: 'Logged out' });
 };
 
