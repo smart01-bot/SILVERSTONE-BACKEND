@@ -1,3 +1,9 @@
+Canonical Phase 6 frontend documentation commit: `6f52962af9d572100921567872674f6b1167a07a` (local development; unpublished).
+
+# Phase 6 pointer — local, PARTIAL
+
+Canonical frontend docs/silverstone/OPERATIONS.md and handoffs/PHASE-06-HANDOFF.md describe independent visibility/privacy/recovery work and D16–D20 policy proposals. Backend adds API no-store and a disposable embedded snapshot restore test/helper only. No schema/dependency change. Native PostgreSQL/Android, durable backup and provider gates remain open. Both development branches contain unpublished Phases 5–6; remote Phase 4 pins unchanged. No push/main/live action or Phase 7.
+
 Canonical Phase 5 frontend documentation commit: `d810a4963a652a520951b71fb6adb35c87060434` (local development; unpublished).
 
 # Phase 5 pointer — local only

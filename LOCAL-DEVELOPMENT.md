@@ -1,3 +1,7 @@
+# Phase 6 local verification
+
+Use synthetic/disposable environments only. Run existing npm tests/builds and all four actual-client HTTP scripts. Backend `node --test tests/foundation/operations.test.js` performs an in-memory embedded snapshot restore, with no file backup or external connection. See canonical OPERATIONS.md for exact scope and limits. Unresolved filters and held amounts use existing authorized records. No operations role, pause, real alert, reconciliation settlement or production backup configured. No new migration/dependency. New API responses are no-store. Native acceptance and D16–D20 remain open; nothing pushed.
+
 # Phase 5 local verification
 
 Use the existing isolated synthetic preview only. Backend runtime/migrations unchanged. Run frontend npm test and build:check with the isolated API URL; backend npm test/build and all four scripts documented below. My Requests refresh now performs a real read; failures remain visible. To inspect stale review: open one synthetic submission twice, decide one, then try the older view; input is retained and explicit reload shows current status. UI/native acceptance remains unverified; see canonical Phase 5 handoff. Nothing pushed.

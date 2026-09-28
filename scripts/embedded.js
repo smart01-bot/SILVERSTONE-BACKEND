@@ -1,7 +1,7 @@
 // Test/dev-only PostgreSQL engine. No filesystem data directory or network URL.
 import { PGlite } from "@electric-sql/pglite";
-export async function embeddedDatabase() {
-  const engine = new PGlite();
+export async function embeddedDatabase({ snapshot } = {}) {
+  const engine = new PGlite(snapshot ? { loadDataDir: snapshot } : {});
   await engine.waitReady;
   const wrap = (connection) => ({
     query: async (sql, values) =>
@@ -13,6 +13,7 @@ export async function embeddedDatabase() {
     syntheticOnly: true,
     ...wrap(engine),
     transaction: (fn) => engine.transaction((tx) => fn(wrap(tx))),
+    snapshot: () => engine.dumpDataDir(),
     close: () => engine.close(),
   };
 }

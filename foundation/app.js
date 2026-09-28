@@ -24,6 +24,11 @@ export function createApp({ db, secret, rateLimit = 30 }) {
   app.disable("x-powered-by");
   app.use(helmet());
   app.use(cors({ origin: false })); // Native app does not need browser CORS.
+  // API responses may contain credentials, private drafts or financial identifiers.
+  app.use("/api/v1", (req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
   app.use((req, res, next) => {
     req.requestId = randomUUID();
     res.set("X-Request-Id", req.requestId);
