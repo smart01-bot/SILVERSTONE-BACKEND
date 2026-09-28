@@ -1,3 +1,5 @@
+> Phase 1 local update: Approved architecture and active source boundary are recorded in PROJECT-STATE.md and LOCAL-DEVELOPMENT.md. The canonical Phase 1 docs are currently in the local frontend development checkout and have NOT been pushed. Remote links below still show Phase 0 until separately authorized publication.
+
 ## Mandatory branch policy — all phases
 
 Confirmed by the user on 27 September 2026: all Silverstone phases must be implemented on `development` in BOTH `smart01-bot/SILVERSTONE-FRONTEND` and `smart01-bot/SILVERSTONE-BACKEND`. All phase code, fixes, tests, documentation and handoffs belong on those branches. Any authorized publication of phase work must target `development` only.

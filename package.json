@@ -6,9 +6,12 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "jest --coverage",
-    "lint": "eslint src",
-    "format": "prettier --write src"
+    "test": "node --test tests/foundation/*.test.js",
+    "lint": "node scripts/check.js",
+    "format": "prettier --write foundation scripts tests/foundation",
+    "build": "node scripts/check.js",
+    "db:migrate": "node scripts/migrate.js",
+    "dev:isolated": "node scripts/isolated.js"
   },
   "keywords": [],
   "author": "",
@@ -32,6 +35,7 @@
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "eslint": "^9.33.0",
     "jest": "^30.0.5",
     "nodemon": "^3.1.10",

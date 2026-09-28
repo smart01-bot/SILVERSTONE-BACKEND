@@ -1,3 +1,5 @@
+> Current local foundation setup: [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md). The historical content below is not the Phase 1 API contract.
+
 # Float System Management Platform - Technical Documentation
 
 ![Node.js](https://img.shields.io/badge/Node.js-v18.x-green)

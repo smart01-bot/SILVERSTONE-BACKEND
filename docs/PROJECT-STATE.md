@@ -1,13 +1,7 @@
-## Mandatory branch policy — all phases
+# Backend state — Phase 1 local foundation
 
-Confirmed by the user on 27 September 2026: all Silverstone phases must be implemented on `development` in BOTH `smart01-bot/SILVERSTONE-FRONTEND` and `smart01-bot/SILVERSTONE-BACKEND`. All phase code, fixes, tests, documentation and handoffs belong on those branches. Any authorized publication of phase work must target `development` only.
+Working branch: development. Verified remote parent: 8002e9b8d2c5d9393bad5c1fec5898ea0393adf0. Phase 1 remains local and unpushed. Main, live data, Firebase and providers are untouched.
 
-Never implement on, commit to, push to or merge into `main` under phase authority. A later main-branch release requires separate explicit user authorization. Keep `feat/registration-wizard` as a donor reference; do not use it as the continuing implementation branch. Fetch the latest `development` refs and compare with the preceding handoff before every phase; never reset newer work to historical main pins.
+Approved: Expo → Express → PostgreSQL, Express identity with revocable sessions, one assigned main-agent per sub-agent and consistent v1 API. Payments disabled. Source now starts through foundation/ only; legacy route/model/service/test code is unmounted historical material.
 
-This policy selects the implementation branches; it does not start a phase or independently authorize deployment, live data changes or real payments. Historical proposed-branch wording is superseded by this confirmed rule. Include it in every future phase initiating message and handoff.
-
-# Backend project state
-
-Working branch: development, created from main 17f7276198af5593fd277f940e7212768a8d0ddd with Phase 0 documentation only.
-
-Read [SILVERSTONE-CONTEXT.md](SILVERSTONE-CONTEXT.md) for verified findings and the canonical frontend context. Phase 1 has not started; no source, database or deployment changes were made. Main is not an implementation target. Read the live branch ref for this documentation commit SHA.
+Read LOCAL-DEVELOPMENT.md and canonical frontend docs/silverstone/handoffs/PHASE-01-HANDOFF.md. Automated isolated PostgreSQL and HTTP checks pass; native PostgreSQL/Docker and native-device verification remain open. No production readiness claim. Final local commit IDs are in the closing artifact/chat, not self-referentially embedded here.
