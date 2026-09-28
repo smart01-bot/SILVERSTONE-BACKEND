@@ -1,3 +1,22 @@
+# Silverstone backend — Phase 2 onboarding
+
+Use development, local-only. npm run dev:isolated applies 001/002 to fresh embedded PostgreSQL and seeds the fixed synthetic roster. main@example.test gets an explicit reviewer grant; pending@example.test is assigned to it and gets source=synthetic_fixture phone proof (NOT real OTP). Password: Synthetic-only-password-2026!. Production/native startup does not import these test seeders; no public grant/assignment/verification mutation exists.
+
+New checks:
+
+```sh
+npm test
+npm run build
+SILVERSTONE_FRONTEND_PATH=../frontend node scripts/client-integration.js
+SILVERSTONE_FRONTEND_PATH=../frontend node scripts/onboarding-client-integration.js
+```
+
+Drafts, private PNG/JPEG bytes, immutable submissions and scoped review are implemented in foundation/onboarding.js and additive 002-onboarding.sql. Phone delivery stays 503 and ordinary submission requires trusted verification; no adapter is configured. File storage is private test-database bytea, not production Supabase storage. No PDF support. No provider, live data or payment execution. See canonical frontend Phase 2 handoff for tests, contract, limits and manual device checklist.
+
+Full acceptance remains partial: SMS/provider, production evidence/storage/retention/bootstrap policy, native PostgreSQL and native Android gates are open. Prototype field requirements are not legal/compliance verification. No destructive rollback: discard only disposable preview data. Migration 002 preserves existing ss_v1 Phase 1 accounts/sessions and leaves legacy/public data untouched in tests.
+
+## Historical Phase 1 setup (onboarding unavailability superseded above)
+
 # Silverstone Phase 1 — local development
 
 Use `development`. This foundation does not connect to Firebase, live databases, Redis or payment providers. No deployment is authorized.

@@ -1,4 +1,5 @@
 import express from "express";
+import { mountOnboarding } from "./onboarding.js";
 import helmet from "helmet";
 import cors from "cors";
 import bcrypt from "bcrypt";
@@ -26,7 +27,11 @@ export function createApp({ db, secret, rateLimit = 30 }) {
     res.set("X-Request-Id", req.requestId);
     next();
   });
-  app.use(express.json({ limit: "32kb" }));
+  app.use((req, res, next) =>
+    req.path === "/api/v1/documents" && req.method === "POST"
+      ? next()
+      : express.json({ limit: "32kb" })(req, res, next),
+  );
   const ok = (res, data) => res.json({ data });
   const limited = (req, res, next) => {
     const now = Date.now();
@@ -150,6 +155,8 @@ export function createApp({ db, secret, rateLimit = 30 }) {
       throw new ApiError(401, "INVALID_CREDENTIALS", "Incorrect password.");
     ok(res, { verified: true });
   });
+  app.post("/api/v1/documents", limited);
+  mountOnboarding(app, db);
   app.get("/api/v1/me", (req, res) => ok(res, agentDTO(req.agent)));
   app.patch("/api/v1/me", active, async (req, res) => {
     allowFields(req.body, ["name"]);

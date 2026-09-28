@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { embeddedDatabase } from "./embedded.js";
+import { seedOnboardingFixtures } from "./onboarding-fixtures.js";
 import { seedSynthetic } from "./fixtures.js";
 import { migrate } from "../foundation/migrate.js";
 import { createApp } from "../foundation/app.js";
 const db = await embeddedDatabase();
 await migrate(db);
-await seedSynthetic(db);
+const fixtures = await seedSynthetic(db);
+await seedOnboardingFixtures(db, fixtures);
 const server = createApp({
   db,
   secret: randomBytes(48).toString("hex"),

@@ -1,3 +1,5 @@
+> Phase 2 current pointer: read local frontend docs/silverstone/PROJECT-STATE.md and handoffs/PHASE-02-HANDOFF.md. Phases 1–2 remain unpublished; remote links below are historical Phase 0. Full acceptance is partial: real verification/provider, policy and native gates remain open. No Phase 3, push, main, live/Firebase or payment changes.
+
 > Phase 1 local update: Approved architecture and active source boundary are recorded in PROJECT-STATE.md and LOCAL-DEVELOPMENT.md. The canonical Phase 1 docs are currently in the local frontend development checkout and have NOT been pushed. Remote links below still show Phase 0 until separately authorized publication.
 
 ## Mandatory branch policy — all phases
