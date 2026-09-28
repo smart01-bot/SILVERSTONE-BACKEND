@@ -1,3 +1,9 @@
+# Phase 4 local boundary — provider unavailable
+
+Apply additive migration 004 only through the existing isolated/disposable setup. Normal preview creates no attempts and executes no provider operation. Request detail shows unknown provider charges separately from Silverstone fee TZS 0. Real callback, payout, reconciliation/manual confirmation and settlement remain disabled.
+
+Run the existing checks and, from backend, `SILVERSTONE_FRONTEND_PATH=../frontend node scripts/provider-client-integration.js` for the additional synthetic evidence HTTP journey. `scripts/synthetic-provider-evidence.js` is embedded-test-only, not a worker/provider implementation; never mount it in API routes. Its simulated confirmation deliberately retains actual unknown status and hold. See the canonical frontend `docs/silverstone/PROVIDER-EVIDENCE.md` and Phase 4 handoff. No external credentials are required or accepted.
+
 # Phase 3 local exchanges
 
 npm run dev:isolated applies migration 003 and seeds labelled test accounts plus 1,000,000 TZS synthetic capacity on each seeded main-agent account. This is not a balance lookup or phone/account verification. No provider/manual settlement runs.

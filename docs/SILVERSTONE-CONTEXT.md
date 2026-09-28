@@ -1,3 +1,7 @@
+## Phase 4 canonical documentation pointer
+
+Frontend development local commit: 680398b67a89b68f5cef676f2147398429019846. Read docs/silverstone/handoffs/PHASE-04-HANDOFF.md and PROVIDER-EVIDENCE.md there. Independent local boundary/evidence work complete; external provider gate BLOCKED, release PARTIAL. Backend uses additive 004-provider-evidence.sql; no provider/manual settlement or money ledger enabled. 50 backend tests, four HTTP journeys and build pass; frontend 15 tests/Hermes export pass. This supersedes earlier current-phase wording. Development only; nothing pushed or deployed; main/live/Firebase untouched.
+
 # Silverstone Phase 3 — local delivery
 
 Status: local synthetic core-exchange gate passes; release acceptance remains PARTIAL. D09/D10 explicitly approved. Phase 4 not started. All changes on development, unpublished; main/live data untouched.

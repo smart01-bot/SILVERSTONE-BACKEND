@@ -10,6 +10,7 @@ export async function embeddedDatabase() {
         : connection.query(sql, values),
   });
   return {
+    syntheticOnly: true,
     ...wrap(engine),
     transaction: (fn) => engine.transaction((tx) => fn(wrap(tx))),
     close: () => engine.close(),

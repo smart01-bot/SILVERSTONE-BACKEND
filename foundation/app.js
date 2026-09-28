@@ -1,4 +1,5 @@
 import express from "express";
+import { providerBoundary, disabledProvider } from "./provider-boundary.js";
 import { mountExchanges } from "./exchanges.js";
 import { mountOnboarding } from "./onboarding.js";
 import helmet from "helmet";
@@ -143,7 +144,14 @@ export function createApp({ db, secret, rateLimit = 30 }) {
       ),
     ),
   );
+  // No callback protocol is configured. Reject before app-session authentication.
+  app.use("/api/v1/provider-events", async () =>
+    disabledProvider.verifyCallback(),
+  );
   app.use("/api/v1", auth.authenticate);
+  app.get("/api/v1/provider-status", active, (req, res) =>
+    ok(res, providerBoundary()),
+  );
   app.post("/api/v1/auth/logout", async (req, res) => {
     await db.query("UPDATE ss_v1.sessions SET revoked_at=now() WHERE id=$1", [
       req.sessionId,

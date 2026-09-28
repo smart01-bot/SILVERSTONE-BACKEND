@@ -2,6 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { ApiError, invalid, allowFields, uuid } from "./errors.js";
 import { active } from "./auth.js";
 import { requestDTO } from "./models.js";
+import { providerBoundary, providerEvidenceDTO } from "./provider-boundary.js";
 const conflict = (message, code = "EXCHANGE_CHANGED") =>
   new ApiError(409, code, message);
 const deny = () =>
@@ -131,6 +132,8 @@ async function detail(tx, row) {
           : row.status === "needs_attention"
             ? "Reconciliation required; reservation retained."
             : "No payment action available.",
+    provider: providerBoundary(),
+    providerEvidence: await providerEvidenceDTO(tx, row.id),
     silverstoneFeeTzs: "0",
     providerExecutionEnabled: false,
   };
