@@ -1,3 +1,4 @@
+import { seedExchangeFixtures } from "./exchange-fixtures.js";
 import { randomBytes } from "node:crypto";
 import { embeddedDatabase } from "./embedded.js";
 import { seedOnboardingFixtures } from "./onboarding-fixtures.js";
@@ -8,6 +9,7 @@ const db = await embeddedDatabase();
 await migrate(db);
 const fixtures = await seedSynthetic(db);
 await seedOnboardingFixtures(db, fixtures);
+await seedExchangeFixtures(db, fixtures);
 const server = createApp({
   db,
   secret: randomBytes(48).toString("hex"),

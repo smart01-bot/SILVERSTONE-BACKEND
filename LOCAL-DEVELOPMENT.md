@@ -1,3 +1,11 @@
+# Phase 3 local exchanges
+
+npm run dev:isolated applies migration 003 and seeds labelled test accounts plus 1,000,000 TZS synthetic capacity on each seeded main-agent account. This is not a balance lookup or phone/account verification. No provider/manual settlement runs.
+
+Verification: npm test; npm run build; SILVERSTONE_FRONTEND_PATH=../frontend node scripts/client-integration.js; same prefix with scripts/onboarding-client-integration.js and scripts/exchange-client-integration.js.
+
+For an explicitly configured guarded native local database, after explicit migration/authorized synthetic fixture preparation, node scripts/exchange-worker.js drains eligible preparation records into provider-disabled blocked state. It uses SILVERSTONE_DATABASE_URL and only permits localhost silverstone_dev/test. It never calls a provider. The isolated in-memory preview does not share that database and does not auto-start a worker. Embedded tests exercise recovery/token fencing without timers. See frontend docs/silverstone/handoffs/PHASE-03-HANDOFF.md.
+
 # Silverstone backend — Phase 2 onboarding
 
 Use development, local-only. npm run dev:isolated applies 001/002 to fresh embedded PostgreSQL and seeds the fixed synthetic roster. main@example.test gets an explicit reviewer grant; pending@example.test is assigned to it and gets source=synthetic_fixture phone proof (NOT real OTP). Password: Synthetic-only-password-2026!. Production/native startup does not import these test seeders; no public grant/assignment/verification mutation exists.

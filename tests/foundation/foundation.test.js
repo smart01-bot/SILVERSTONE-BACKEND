@@ -197,7 +197,10 @@ test("isolated PostgreSQL foundation and HTTP authorization", async (t) => {
     },
   );
   await t.test("payment and legacy endpoints cannot execute", async () => {
-    for (const path of ["/api/v1/transfers/process", "/api/v1/requests"])
+    for (const path of [
+      "/api/v1/transfers/process",
+      "/api/v1/requests/disabled-command",
+    ])
       assert.equal(
         (
           await request(app)

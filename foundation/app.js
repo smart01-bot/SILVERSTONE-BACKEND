@@ -1,4 +1,5 @@
 import express from "express";
+import { mountExchanges } from "./exchanges.js";
 import { mountOnboarding } from "./onboarding.js";
 import helmet from "helmet";
 import cors from "cors";
@@ -221,34 +222,7 @@ export function createApp({ db, secret, rateLimit = 30 }) {
       throw new ApiError(404, "NOT_FOUND", "Agent not found.");
     ok(res, agentDTO(row));
   });
-  app.get("/api/v1/requests", active, async (req, res) => {
-    const { limit, cursor } = pageArgs(req);
-    const field =
-      req.agent.role === "main-agent" ? "main_agent_id" : "sub_agent_id";
-    const rows = (
-      await db.query(
-        `SELECT * FROM ss_v1.transfer_requests WHERE ${field}=$1 AND ($2::uuid IS NULL OR id>$2) ORDER BY id LIMIT $3`,
-        [req.agent.id, cursor, limit + 1],
-      )
-    ).rows;
-    page(res, rows, limit, requestDTO);
-  });
-  app.get("/api/v1/requests/:id", active, async (req, res) => {
-    if (!uuid(req.params.id)) throw invalid("Invalid request ID.");
-    const row = (
-      await db.query("SELECT * FROM ss_v1.transfer_requests WHERE id=$1", [
-        req.params.id,
-      ])
-    ).rows[0];
-    if (
-      !row ||
-      (req.agent.role === "main-agent"
-        ? row.main_agent_id
-        : row.sub_agent_id) !== req.agent.id
-    )
-      throw new ApiError(404, "NOT_FOUND", "Request not found.");
-    ok(res, requestDTO(row));
-  });
+  mountExchanges(app, db);
   app.use("/api/v1/requests", active, (req, res, next) =>
     next(
       new ApiError(
