@@ -1,3 +1,9 @@
+Canonical Phase 5 frontend documentation commit: `d810a4963a652a520951b71fb6adb35c87060434` (local development; unpublished).
+
+# Phase 5 pointer — local only
+
+Canonical frontend docs/silverstone/handoffs/PHASE-05-HANDOFF.md records the frontend refinement. Published frontend baseline: 6d841de96272e44c21022b021784e90bb3ab57e8; backend baseline: a10e9fcf7f8dd0be8eda28a3fe237641440d2245. Both development checkouts clean at phase start and remote refs matched. This phase changes backend documentation only; no runtime/API/migrations. Phase 5 is PARTIAL pending native/visual acceptance; external provider gate remains BLOCKED. Nothing pushed; Phase 6 not started. Final frontend documentation commit is identified in the delivered handoff/recovery package.
+
 # Phase 4 — local provider boundary and synthetic transaction evidence
 
 28 September 2026. Independent local scope complete; **external provider gate BLOCKED and release acceptance PARTIAL**. No provider selected, no authorized external sandbox scope, no real payment/notification, no manual settlement. Phase 5 not started. Both repositories remain on development; nothing pushed, main/live databases/Firebase untouched.

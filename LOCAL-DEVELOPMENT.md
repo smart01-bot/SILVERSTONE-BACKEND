@@ -1,3 +1,7 @@
+# Phase 5 local verification
+
+Use the existing isolated synthetic preview only. Backend runtime/migrations unchanged. Run frontend npm test and build:check with the isolated API URL; backend npm test/build and all four scripts documented below. My Requests refresh now performs a real read; failures remain visible. To inspect stale review: open one synthetic submission twice, decide one, then try the older view; input is retained and explicit reload shows current status. UI/native acceptance remains unverified; see canonical Phase 5 handoff. Nothing pushed.
+
 # Phase 4 local boundary — provider unavailable
 
 Apply additive migration 004 only through the existing isolated/disposable setup. Normal preview creates no attempts and executes no provider operation. Request detail shows unknown provider charges separately from Silverstone fee TZS 0. Real callback, payout, reconciliation/manual confirmation and settlement remain disabled.
