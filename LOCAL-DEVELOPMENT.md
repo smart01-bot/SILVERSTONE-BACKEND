@@ -1,3 +1,11 @@
+# Phase 6 continuation local verification — October 7, 2026
+
+Current continuation supersedes older availability statements below. Follow development only. Backend locked dependencies and guarded disposable database fixtures are required; no inherited live configuration is used. New migration 005 grants no one operational access. `npm run dev:isolated` alone provisions explicitly synthetic operation grants: main@example.test manages its scope, and other-main@example.test is its read/ownership-only backup. In the frontend Queue, open the options icon to inspect operational controls. No financial resolution, real alert or provider action is available.
+
+Verify backend `npm test`, `npm run build`, all five actual-client HTTP scripts (including scripts/operations-client-integration.js), and `node scripts/native-operations-drill.js` when Docker is available. The native drill creates/removes its own loopback-only PostgreSQL container, encrypted temporary archive and synthetic volume. It never accepts a live URL. Verify frontend `npm test` and `npm run build:check` using the explicit emulator-local /api/v1 URL; the build remains an Android JS/Hermes export. No APK/signing/publishing/device acceptance implied.
+
+No new dependency upgrade. For normal native dev startup, explicitly apply the additive migration through the single guarded migrator; it seeds nobody. Never deploy the new operations API onto the restored public /api service or apply ss_v1 migrations to live Supabase under this authority. See canonical Phase 6 continuation/API/operations docs. Full release gate remains PARTIAL pending production policy/provider/native-device acceptance.
+
 # Phase 6 local verification
 
 Use synthetic/disposable environments only. Run existing npm tests/builds and all four actual-client HTTP scripts. Backend `node --test tests/foundation/operations.test.js` performs an in-memory embedded snapshot restore, with no file backup or external connection. See canonical OPERATIONS.md for exact scope and limits. Unresolved filters and held amounts use existing authorized records. No operations role, pause, real alert, reconciliation settlement or production backup configured. No new migration/dependency. New API responses are no-store. Native acceptance and D16–D20 remain open; nothing pushed.

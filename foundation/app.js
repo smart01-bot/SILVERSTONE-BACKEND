@@ -1,3 +1,4 @@
+import { mountOperations } from './operations.js';
 import express from "express";
 import { providerBoundary, disabledProvider } from "./provider-boundary.js";
 import { mountExchanges } from "./exchanges.js";
@@ -235,6 +236,7 @@ export function createApp({ db, secret, rateLimit = 30 }) {
       throw new ApiError(404, "NOT_FOUND", "Agent not found.");
     ok(res, agentDTO(row));
   });
+  mountOperations(app, db);
   mountExchanges(app, db);
   app.use("/api/v1/requests", active, (req, res, next) =>
     next(

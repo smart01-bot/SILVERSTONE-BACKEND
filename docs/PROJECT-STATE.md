@@ -1,3 +1,17 @@
+# Phase 6 continuation — October 7, 2026 (Africa/Nairobi)
+
+Local operational controls and isolated recovery verification are implemented. **Full Phase 6 release acceptance remains PARTIAL** because production ownership/escalation, reconciliation authority, backup custody/retention and provider/device gates are not configured. Phase 7 has not started. This continuation changes development locally only; nothing from this continuation is pushed or deployed.
+
+Verified remote baselines: frontend `eeca65bde0b6604da30e30ef03e17eeb5522d7f2`; backend `37699dc6c0214835ebfc10b71ad886856ef2a0f2`. These already contain the earlier Phase 6 changes; historical “nothing pushed” text below describes earlier delivery, not current remote publication. The isolated checkouts recover those exact commits and preserve the original /workspace checkouts, including the frontend package.json edit.
+
+Delivered explicit capability/scoping controls, owner/backup assignment, optional per-case UTC deadlines, in-app escalation and safe diagnostics, immutable operational audit/evidence, read-only statement comparison and scoped pause/resume fencing. No financial resolution or provider call is added. Additive migration 005 is applied only to disposable test databases. API, private-document, session, ownership and hold invariants remain enforced.
+
+Verification: 54 backend tests; 26 frontend tests; backend build; five actual frontend-client HTTP journeys; Android JS/Hermes export. Native PostgreSQL 16 drill verifies ten concurrent same-key requests, independent-connection pause fencing, encrypted disk backup, wrong-key/corruption rejection, database-process kill/restart, all 32-table digest equality after restore, replay, preserved unknown holds and stale-claim denial. Sample restart 1182 ms; restore 632 ms; these are isolated observations, not production RPO/RTO commitments. No native Android render/screenshot/device acceptance or genuine settlement evidence.
+
+Read `handoffs/PHASE-06-CONTINUATION.md`, `OPERATIONS.md`, `API-CONTRACT.md` and `PHASE-07-INITIATING-MESSAGE.md`. Continue on development in both repositories; no Phase 7 execution, push, main change, live migration or deployment authorized.
+
+Canonical source: SILVERSTONE-FRONTEND development docs/silverstone/. Read PHASE-06-CONTINUATION.md and the delivery manifest before continuing. This is a pointer, not a second editable policy source.
+
 Canonical Phase 6 frontend documentation commit: `6f52962af9d572100921567872674f6b1167a07a` (local development; unpublished).
 
 # Phase 6 pointer — local, PARTIAL

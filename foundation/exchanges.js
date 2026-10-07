@@ -1,3 +1,4 @@
+import { operationGate } from './operations.js';
 import { randomUUID, createHash } from "node:crypto";
 import { ApiError, invalid, allowFields, uuid } from "./errors.js";
 import { active } from "./auth.js";
@@ -241,6 +242,7 @@ export function mountExchanges(app, db) {
         req.get("Idempotency-Key"),
         { sourceAccountId, destinationAccountId, amountTzs, currency, urgent },
         async () => {
+          await operationGate(tx, req.agent.main_agent_id, "requests");
           const accounts = (
             await tx.query(
               "SELECT * FROM ss_v1.network_accounts WHERE agent_id IN ($1,$2) ORDER BY id FOR UPDATE",
@@ -401,6 +403,7 @@ export function mountExchanges(app, db) {
                 "Historical request requires reconciliation; cannot process automatically.",
               );
             if (action === "accept") {
+              await operationGate(tx, row.main_agent_id, "acceptance");
               if (row.status !== "awaiting_review")
                 throw conflict(
                   "Only requests awaiting review can be accepted.",
@@ -512,10 +515,11 @@ export async function claimExchangeJob(db, { leaseSeconds = 30 } = {}) {
     // Request first is the lock order shared by commands and worker completion.
     const row = (
       await tx.query(`SELECT r.* FROM ss_v1.transfer_requests r JOIN ss_v1.exchange_jobs j ON j.request_id=r.id
-   WHERE r.status='awaiting_source' AND ((j.status='ready' AND j.available_at<=clock_timestamp()) OR (j.status='claimed' AND j.lease_until<=clock_timestamp()))
+   WHERE r.status='awaiting_source' AND NOT EXISTS(SELECT 1 FROM ss_v1.operations_controls c WHERE c.main_agent_id=r.main_agent_id AND c.preparation_paused) AND ((j.status='ready' AND j.available_at<=clock_timestamp()) OR (j.status='claimed' AND j.lease_until<=clock_timestamp()))
    ORDER BY r.queue_sequence FOR UPDATE OF r SKIP LOCKED LIMIT 1`)
     ).rows[0];
     if (!row) return null;
+    await operationGate(tx, row.main_agent_id, "preparation");
     // Do not acquire participant write locks after request locks (avoids inverse lock order).
     const eligible = (
       await tx.query(
