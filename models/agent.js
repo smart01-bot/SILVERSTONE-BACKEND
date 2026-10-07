@@ -1,94 +1,18 @@
 import db from '../config/database.js';
-import { ROLES } from '../utils/constants.js';
 
-const createAgent = async (
-  username, name, email, phone,
-  networks, agentPhoneNumbers, role, passwordHash,
-  businessName, businessLocation, coordinates,
-  regNo, tin, nida, floatCapacity,
-  tinCertUrl, licenceCertUrl, selfieVerified, selfieUrl
-) => {
-  if (!ROLES.includes(role)) {
-    return Promise.reject({ status: 400, message: 'Invalid role' });
-  }
-  const existingPhone = await db.oneOrNone('SELECT id FROM agents WHERE phone = $1', [phone]);
-  if (existingPhone) {
-    return Promise.reject({ status: 409, message: 'Phone number already registered' });
-  }
-  const existingEmail = await db.oneOrNone('SELECT id FROM agents WHERE email = $1', [email]);
-  if (existingEmail) {
-    return Promise.reject({ status: 409, message: 'Email already registered' });
-  }
-  return db.one(
-    `INSERT INTO agents (
-       username, name, email, phone,
-       networks, agentphonenumbers, role, passwordhash,
-       status, pin_set,
-       business_name, business_location, coordinates,
-       reg_no, tin, nida, float_capacity,
-       tin_cert_url, licence_cert_url, selfie_verified, selfie_url
-     ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,
-       'pending', FALSE,
-       $9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
-     ) RETURNING *`,
-    [
-      username, name ?? username, email, phone,
-      networks, agentPhoneNumbers, role, passwordHash,
-      businessName, businessLocation, coordinates,
-      regNo, tin, nida, floatCapacity ?? 0,
-      tinCertUrl, licenceCertUrl, selfieVerified ?? false, selfieUrl ?? null,
-    ]
-  );
-};
-
-const getAgentByPhone  = (phone)  => db.oneOrNone('SELECT * FROM agents WHERE phone = $1',    [phone]);
-const getAgentByName   = (username) => db.oneOrNone('SELECT * FROM agents WHERE username = $1', [username]);
-const getAgentByEmail  = (email)  => db.oneOrNone('SELECT * FROM agents WHERE email = $1',    [email]);
-const getAgent         = (id)     => db.oneOrNone('SELECT * FROM agents WHERE id = $1',       [id]);
-const getAllAgents      = ()       => db.manyOrNone('SELECT * FROM agents');
-
-const updateAgentData = async (id, fields) => {
-  const allowed = [
-    'username','name','email','phone','networks','agentphonenumbers',
-    'role','passwordhash','status','pin_set',
-    'business_name','business_location','coordinates',
-    'reg_no','tin','nida','float_capacity',
-    'tin_cert_url','licence_cert_url','selfie_verified','selfie_url',
-    'rejection_reason',
-  ];
-
-  const updates = [];
-  const values  = [id];
-  let   index   = 2;
-
-  for (const [key, val] of Object.entries(fields)) {
-    if (allowed.includes(key) && val !== undefined) {
-      updates.push(`${key} = $${index++}`);
-      values.push(val);
-    }
-  }
-
-  if (updates.length === 0) {
-    return Promise.reject({ status: 400, message: 'No fields to update' });
-  }
-
-  return db.one(`UPDATE agents SET ${updates.join(', ')} WHERE id = $1 RETURNING *`, values);
-};
-
-const deleteAgent = (id) => db.none('DELETE FROM agents WHERE id = $1', [id]);
-
-const getAgentRequestsData = (id) =>
-  db.manyOrNone('SELECT * FROM requests WHERE sub_agent_id = $1 ORDER BY created_at DESC', [id]);
-
-const getAgentTransactionsData = (id) =>
-  db.manyOrNone(
-    'SELECT t.* FROM transactions t JOIN requests r ON t.request_id = r.id WHERE r.sub_agent_id = $1 ORDER BY t.created_at DESC',
-    [id]
-  );
-
-export {
-  createAgent, getAgentByPhone, getAgentByName, getAgentByEmail,
-  getAgent, getAllAgents, updateAgentData, deleteAgent,
-  getAgentRequestsData, getAgentTransactionsData,
+export const getAgent = id => db.oneOrNone('SELECT * FROM public.agents WHERE id = $1', [id]);
+export const getAgentByPhone = phone => db.oneOrNone('SELECT * FROM public.agents WHERE phone_number = $1', [phone]);
+export const safeAgent = agent => Object.fromEntries(
+  ['id', 'role', 'phone_number', 'full_name', 'status', 'business_name', 'business_location', 'created_at', 'updated_at']
+    .map(key => [key, agent[key]])
+);
+export const getVisibleAgents = user => user.role === 'main-agent'
+  ? db.manyOrNone(`SELECT DISTINCT a.id, a.role, a.phone_number, a.full_name, a.status
+      FROM public.agents a LEFT JOIN public.transfer_requests r ON r.sub_agent_id = a.id
+      WHERE a.id = $1 OR r.main_agent_id = $1 LIMIT 200`, [user.id])
+  : db.manyOrNone('SELECT id, role, phone_number, full_name, status FROM public.agents WHERE id = $1', [user.id]);
+export const canReadAgent = async (user, id) => {
+  if (user.id === id) return true;
+  if (user.role !== 'main-agent') return false;
+  return !!await db.oneOrNone('SELECT id FROM public.transfer_requests WHERE sub_agent_id = $1 AND main_agent_id = $2 LIMIT 1', [id, user.id]);
 };

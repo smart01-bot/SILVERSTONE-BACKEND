@@ -1,39 +1,25 @@
 import express from 'express';
-import auth from '../middleware/auth.js';
+import auth, { approved } from '../middleware/auth.js';
 import { getDashboardData } from '../controllers/dashboardController.js';
-
+import { getAgent } from '../models/agent.js';
 const router = express.Router();
-
-router.get("/", auth(true), async (req, res) => {
-    res.set({
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': req.get('origin') || 'https://svc-dashboard.netlify.app',
-        'Access-Control-Allow-Credentials': 'true'
-    });
-
-    // Send initial message
-    res.write('event: connected\ndata: {"message": "Connected to dashboard updates"}\n\n');
-
-    const interval = setInterval(async () => {
-        try {
-        const dashboardData = await getDashboardData();
-
-        // Send data as SSE event
-        res.write(`event: dashboard\ndata: ${JSON.stringify(dashboardData)}\n\n`);
-        } catch (error) {
-        console.error('❌ SSE Error:', error.message);
-        res.write(`event: error\ndata: {"error": "Failed to fetch dashboard data"}\n\n`);
-        }
-    }, 2000); 
-
-    // Handle client disconnect
-    req.on('close', () => {
-        clearInterval(interval);
-        res.end();
-        console.log('✅ SSE client disconnected');
-    });
-})
-
+router.get('/', auth(true), approved, async (req, res) => {
+  res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  res.write('event: connected\ndata: {"message":"Connected"}\n\n');
+  let running = false;
+  const interval = setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      if (Date.now() >= req.user.tokenExpiresAt) { res.end(); return; }
+      const current = await getAgent(req.user.id);
+      if (!current || current.status !== 'approved' || current.role !== 'main-agent') { res.end(); return; }
+      const data = await getDashboardData(req.user);
+      if (!res.writableEnded) res.write(`event: dashboard\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      if (!res.writableEnded) res.write('event: error\ndata: {"error":"Dashboard unavailable"}\n\n');
+    } finally { running = false; }
+  }, 2000);
+  res.on('close', () => clearInterval(interval));
+});
 export default router;

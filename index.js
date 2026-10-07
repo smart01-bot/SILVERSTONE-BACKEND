@@ -1,74 +1,43 @@
-import express from 'express';
-import dotenv from "dotenv";
-dotenv.config({quiet: true});
-import cors from 'cors';
-import helmet from 'helmet';
-import requestRoutes from './routes/requestRoutes.js';
-import transferRoutes from './routes/transferRoutes.js';
-import authRoutes from './routes/authRoutes.js';
-import agentRoutes from './routes/agentRoutes.js';
-import analyticsRoutes from './routes/analyticsRoutes.js';
-import dashboardRoutes from './routes/dashboardRoutes.js';
-import sseRoutes from './routes/sseRoutes.js';
-import errorHandler from './middleware/errorHandler.js';
-import { getNextRequest } from './services/queueService.js';
-import { processTransfer } from './services/transferService.js';
-import bodyParser from 'body-parser';
-import cookieParser from 'cookie-parser';
+import { verifyPublicSchema } from './config/schema.js';
+import app from './app.js';
+import db from './config/database.js';
+import redis from './config/redis.js';
 
-// Initialize Express app and HTTP server
-const app = express();
+let server;
+async function shutdown() {
+  app.locals.dependenciesReady = false;
+  if (server) await new Promise(resolve => server.close(resolve));
+  if (redis.isOpen) await redis.quit();
+  await db.$pool.end();
+}
 
-// Middleware
-app.use(helmet());
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://svc-dashboard.netlify.app'
-];
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g., server-to-server) or from allowed origins
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, origin);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  })
-);
-app.use(express.json());
-
-//body parser 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }))
-app.use(cookieParser());
-
-// Routes
-app.use('/api/requests', requestRoutes);
-app.use('/api/transfers', transferRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/agents', agentRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/sse', sseRoutes); 
-
-// Background job to process queue every 1 seconds
-setInterval(async () => {
-  try {
-    const request = await getNextRequest();
-    if (request) await processTransfer(request.id);
-  } catch (error) {
-    console.error('Queue processing error:', error);
+let startupStage = 'configuration';
+try {
+  if (!process.env.JWT_SECRET) throw new Error('Missing JWT_SECRET');
+  if (process.env.ENABLE_QUEUE_WORKER === 'true') throw new Error('Legacy worker is incompatible');
+  startupStage = 'PostgreSQL TLS and schema';
+  await db.one('SELECT 1 AS ok');
+  await verifyPublicSchema(db);
+  startupStage = 'Redis TLS';
+  await redis.connect();
+  await redis.ping();
+  const port = process.env.PORT || 8800;
+  app.locals.checkDependencies = () => Promise.all([
+    db.one('SELECT 1 AS ok'),
+    redis.withCommandOptions({ abortSignal: AbortSignal.timeout(10000) }).ping(),
+  ]);
+  app.locals.dependenciesReady = true;
+  server = app.listen(port, '0.0.0.0', () => console.log(`SERVER RUNNING ON PORT ${port}`));
+  server.on('error', async () => {
+    console.error('HTTP server failed to start');
+    await shutdown();
+    process.exitCode = 1;
+  });
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.once(signal, async () => { await shutdown(); });
   }
-}, 1000);
-
-// Error handling
-app.use(errorHandler);
-
-const PORT = process.env.PORT || 8800;
-app.listen(PORT, () => console.log(`SERVER RUNNING ON PORT ${PORT}`));
+} catch {
+  console.error(`Backend startup failed at ${startupStage}; check service access, TLS trust, and configuration`);
+  await shutdown();
+  process.exitCode = 1;
+}

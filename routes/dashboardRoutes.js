@@ -1,8 +1,9 @@
 import express from 'express';
 import { getRevenueMetrics, getMonthlyCounts, getPerformanceMetrics, getRequestsPerNetwork, getTopPerformingAgents } from '../controllers/dashboardController.js';
-import auth from '../middleware/auth.js';
+import auth, { approved } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(auth(), approved);
 
 router.get('/revenue-metrics', auth(true), getRevenueMetrics); 
 router.get('/monthly-counts', auth(true), getMonthlyCounts); 
