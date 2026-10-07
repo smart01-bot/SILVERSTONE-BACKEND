@@ -6,6 +6,6 @@ export async function verifyPublicSchema(db) {
     ['public']);
   const actual = new Set(columns.map(c => `${c.table_name}.${c.column_name}`));
   for (const [table, names] of Object.entries(expected)) {
-    for (const name of names) if (!actual.has(`${table}.${name}`)) throw new Error('Required public schema does not match the reviewed metadata');
+    for (const name of names) if (!actual.has(`${table}.${name}`)) throw Object.assign(new Error('Required public schema does not match the reviewed metadata'), { code: 'SCHEMA_MISMATCH' });
   }
 }

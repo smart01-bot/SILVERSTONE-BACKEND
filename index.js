@@ -1,3 +1,4 @@
+import { safeDiagnostic } from './config/diagnostics.js';
 import { verifyPublicSchema } from './config/schema.js';
 import app from './app.js';
 import db from './config/database.js';
@@ -13,10 +14,11 @@ async function shutdown() {
 
 let startupStage = 'configuration';
 try {
-  if (!process.env.JWT_SECRET) throw new Error('Missing JWT_SECRET');
-  if (process.env.ENABLE_QUEUE_WORKER === 'true') throw new Error('Legacy worker is incompatible');
-  startupStage = 'PostgreSQL TLS and schema';
+  if (!process.env.JWT_SECRET) throw Object.assign(new Error('Missing JWT_SECRET'), { code: 'MISSING_JWT_SECRET' });
+  if (process.env.ENABLE_QUEUE_WORKER === 'true') throw Object.assign(new Error('Legacy worker is incompatible'), { code: 'LEGACY_WORKER_DISABLED' });
+  startupStage = 'PostgreSQL connection/TLS';
   await db.one('SELECT 1 AS ok');
+  startupStage = 'public schema readiness';
   await verifyPublicSchema(db);
   startupStage = 'Redis TLS';
   await redis.connect();
@@ -36,8 +38,8 @@ try {
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, async () => { await shutdown(); });
   }
-} catch {
-  console.error(`Backend startup failed at ${startupStage}; check service access, TLS trust, and configuration`);
+} catch (error) {
+  console.error(`Backend startup failed at ${startupStage}: ${JSON.stringify(safeDiagnostic(error))}`);
   await shutdown();
   process.exitCode = 1;
 }

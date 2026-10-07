@@ -1,3 +1,4 @@
+import { safeDiagnostic } from '../config/diagnostics.js';
 import dotenv from 'dotenv';
 import { readFileSync, existsSync } from 'node:fs';
 import { Client } from 'pg';
@@ -34,8 +35,8 @@ if (existsSync(policyPath)) {
       await verifyPublicSchema({ manyOrNone: async (sql, args) => (await client.query(sql, args)).rows });
       await client.query('ROLLBACK');
       console.log('Supabase: verified TLS, authentication, and read-only SELECT 1/schema metadata');
-    } catch {
-      console.log('Supabase: FAILED; check network access, credentials, schema compatibility, and CA trust');
+    } catch (error) {
+      console.log(`Supabase: FAILED ${JSON.stringify(safeDiagnostic(error))}`);
       process.exitCode = 1;
     } finally {
       if (client) await client.end().catch(() => {});
@@ -61,8 +62,8 @@ if (existsSync(policyPath)) {
       await client.connect();
       if (await client.ping() !== 'PONG') throw new Error('Unexpected PING reply');
       console.log('Redis: verified TLS, authentication, and PING');
-    } catch {
-      console.log('Redis: FAILED; check network access, credentials, and CA trust');
+    } catch (error) {
+      console.log(`Redis: FAILED ${JSON.stringify(safeDiagnostic(error))}`);
       process.exitCode = 1;
     } finally {
       if (client?.isOpen) await client.quit().catch(() => client.destroy());
