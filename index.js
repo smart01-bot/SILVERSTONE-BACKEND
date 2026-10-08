@@ -13,10 +13,10 @@ const enabled = (value) => value === "true";
 
 // Importing this file never listens, connects, migrates, or starts a worker.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const databaseUrl = process.env.SILVERSTONE_DATABASE_URL || process.env.DATABASE_URL;
+  const jwtSecret = process.env.SILVERSTONE_JWT_SECRET || process.env.JWT_SECRET;
   const allowRemote = enabled(process.env.SILVERSTONE_ALLOW_REMOTE_DATABASE);
-  const db = connectDatabase(process.env.SILVERSTONE_DATABASE_URL, {
-    allowRemote,
-  });
+  const db = connectDatabase(databaseUrl, { allowRemote });
   let closeRateLimitStore = async () => {};
   try {
     await db.query("SELECT name FROM ss_v1.schema_migrations");
@@ -30,7 +30,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
     const core = createApp({
       db,
-      secret: process.env.SILVERSTONE_JWT_SECRET,
+      secret: jwtSecret,
       // Hosted traffic is limited by the shared wrapper below. Keep this high to
       // avoid counting the same authentication request twice.
       rateLimit: allowRemote ? 1_000_000 : 30,
