@@ -2,17 +2,16 @@ import pg from "pg";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const LOCAL_DATABASE = /^\/silverstone_(test|dev)$/;
-const SECURE_SSL_MODES = new Set(["require", "verify-ca", "verify-full"]);
 
 function parseDatabaseUrl(url) {
   let target;
   try {
     target = new URL(url);
   } catch {
-    throw new Error("Set SILVERSTONE_DATABASE_URL to a valid PostgreSQL URL.");
+    throw new Error("Set SILVERSTONE_DATABASE_URL or DATABASE_URL to a valid PostgreSQL URL.");
   }
   if (!["postgres:", "postgresql:"].includes(target.protocol))
-    throw new Error("SILVERSTONE_DATABASE_URL must use PostgreSQL.");
+    throw new Error("Silverstone database URL must use PostgreSQL.");
   return target;
 }
 
@@ -34,25 +33,24 @@ export function assertHostedDatabase(url) {
   const target = parseDatabaseUrl(url);
   if (LOCAL_HOSTS.has(target.hostname))
     throw new Error("Hosted database mode requires a non-local PostgreSQL host.");
-  if (!SECURE_SSL_MODES.has(target.searchParams.get("sslmode"))) {
-    throw new Error(
-      "Hosted PostgreSQL must use ?sslmode=require (or verify-ca/verify-full).",
-    );
-  }
   return url;
 }
 
 export function connectDatabase(url, { allowRemote = false } = {}) {
   const target = parseDatabaseUrl(url);
-  const connectionString = isLocalTarget(target)
+  const local = isLocalTarget(target);
+  const connectionString = local
     ? assertLocalDatabase(url)
     : allowRemote
       ? assertHostedDatabase(url)
       : assertLocalDatabase(url);
 
+  // Hosted PostgreSQL always uses verified TLS. Do not depend on a query-string
+  // flag being embedded in the secret Render connection URL.
   const pool = new pg.Pool({
     connectionString,
     max: 5,
+    ...(local ? {} : { ssl: { rejectUnauthorized: true } }),
   });
   return {
     query: (sql, values) => pool.query(sql, values),
