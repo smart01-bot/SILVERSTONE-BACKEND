@@ -32,8 +32,14 @@ export async function migrate(db) {
       const sql = await readFile(new URL(name, directory), "utf8");
       const checksum = createHash("sha256").update(sql).digest("hex");
       const old = applied.find((row) => row.name === name);
-      if (old && old.checksum !== checksum)
+      if (old?.checksum === "external") {
+        await tx.query(
+          "UPDATE ss_v1.schema_migrations SET checksum=$1 WHERE name=$2",
+          [checksum, name],
+        );
+      } else if (old && old.checksum !== checksum) {
         throw new Error(`Migration checksum mismatch: ${name}`);
+      }
       if (!old) {
         // PostgreSQL accepts a multi-statement migration with no bound values.
         await tx.query(sql);
