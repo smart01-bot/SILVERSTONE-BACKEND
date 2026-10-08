@@ -1,10 +1,20 @@
 import "dotenv/config";
 import { connectDatabase } from "../foundation/database.js";
 import { migrate } from "../foundation/migrate.js";
-const db = connectDatabase(process.env.SILVERSTONE_DATABASE_URL);
+
+const allowRemote = process.env.SILVERSTONE_ALLOW_REMOTE_DATABASE === "true";
+if (allowRemote && process.env.SILVERSTONE_ALLOW_REMOTE_MIGRATIONS !== "true") {
+  throw new Error(
+    "Hosted migrations require SILVERSTONE_ALLOW_REMOTE_MIGRATIONS=true.",
+  );
+}
+
+const db = connectDatabase(process.env.SILVERSTONE_DATABASE_URL, {
+  allowRemote,
+});
 try {
   await migrate(db);
-  console.log("Local foundation migrations applied.");
+  console.log("Silverstone migrations applied.");
 } finally {
   await db.close();
 }
