@@ -1,4 +1,5 @@
 import pg from "pg";
+import { readFileSync } from "node:fs";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const LOCAL_DATABASE = /^\/silverstone_(test|dev)$/;
@@ -36,21 +37,38 @@ export function assertHostedDatabase(url) {
   return url;
 }
 
-export function connectDatabase(url, { allowRemote = false } = {}) {
+export function connectDatabase(url, { allowRemote = false, env = process.env } = {}) {
   const target = parseDatabaseUrl(url);
   const local = isLocalTarget(target);
-  const connectionString = local
-    ? assertLocalDatabase(url)
-    : allowRemote
-      ? assertHostedDatabase(url)
-      : assertLocalDatabase(url);
+  if (local) assertLocalDatabase(url);
+  else if (allowRemote) assertHostedDatabase(url);
+  else assertLocalDatabase(url);
 
-  // Hosted PostgreSQL always uses verified TLS. Do not depend on a query-string
-  // flag being embedded in the secret Render connection URL.
+  let connectionString = url;
+  let ssl;
+  if (!local) {
+    // pg lets connection-string SSL parameters override the explicit ssl object,
+    // so strip them before applying the trusted CA used by the hosted service.
+    const cleaned = new URL(url);
+    for (const key of ["sslmode", "sslcert", "sslkey", "sslrootcert", "ssl"])
+      cleaned.searchParams.delete(key);
+    connectionString = cleaned.toString();
+
+    let ca;
+    if (env.DATABASE_SSL_CA_FILE) {
+      try {
+        ca = readFileSync(env.DATABASE_SSL_CA_FILE, "utf8");
+      } catch {
+        throw new Error("Unable to read the database CA file.");
+      }
+    }
+    ssl = { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
+  }
+
   const pool = new pg.Pool({
     connectionString,
     max: 5,
-    ...(local ? {} : { ssl: { rejectUnauthorized: true } }),
+    ...(ssl ? { ssl } : {}),
   });
   return {
     query: (sql, values) => pool.query(sql, values),
