@@ -3,6 +3,8 @@ import express from "express";
 import { pathToFileURL } from "node:url";
 import { createApp } from "./foundation/app.js";
 import { connectDatabase } from "./foundation/database.js";
+import { createHostedAuthRouter } from "./foundation/hosted-auth.js";
+import { createSupabaseCredentialProvider } from "./foundation/supabase-credentials.js";
 import {
   connectRedisRateLimitStore,
   createRateLimitMiddleware,
@@ -28,12 +30,28 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       store: redis.store,
     });
 
+    const credentials = allowRemote
+      ? createSupabaseCredentialProvider({
+          url: process.env.SUPABASE_URL,
+          publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
+        })
+      : null;
+    if (allowRemote && !credentials)
+      throw new Error(
+        "Hosted mode requires SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.",
+      );
+
     const core = createApp({
       db,
       secret: jwtSecret,
       // Hosted traffic is limited by the shared wrapper below. Keep this high to
       // avoid counting the same authentication request twice.
       rateLimit: allowRemote ? 1_000_000 : 30,
+    });
+    const hostedAuth = createHostedAuthRouter({
+      db,
+      secret: jwtSecret,
+      credentials,
     });
     const app = express();
     if (allowRemote) app.set("trust proxy", 1);
@@ -43,13 +61,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         (req.path === "/api/v1/documents" && req.method === "POST");
       return limited ? sharedLimit(req, res, next) : next();
     });
+    if (hostedAuth) app.use(hostedAuth);
     app.use(core);
 
     const port = Number(process.env.PORT || 8800);
     const host = process.env.HOST || (allowRemote ? "0.0.0.0" : "127.0.0.1");
     const server = app.listen(port, host, () =>
       console.log(
-        `Silverstone API listening on ${host}:${port}; payments disabled; shared rate limit ${redis.store ? "enabled" : "using local fallback"}.`,
+        `Silverstone API listening on ${host}:${port}; payments disabled; shared rate limit ${redis.store ? "enabled" : "using local fallback"}; hosted credentials ${credentials ? "Supabase Auth" : "local"}.`,
       ),
     );
     for (const signal of ["SIGINT", "SIGTERM"])
