@@ -8,7 +8,7 @@ const fail = (message) => {
   throw new Error(message);
 };
 
-const databaseUrl = process.env.SILVERSTONE_DATABASE_URL;
+const databaseUrl = process.env.SILVERSTONE_DATABASE_URL || process.env.DATABASE_URL;
 const allowRemote = enabled(process.env.SILVERSTONE_ALLOW_REMOTE_DATABASE);
 const allowRemoteBootstrap = enabled(
   process.env.SILVERSTONE_ALLOW_REMOTE_BOOTSTRAP,
@@ -20,7 +20,7 @@ const name = (process.env.SILVERSTONE_BOOTSTRAP_NAME || "").trim();
 const phone = (process.env.SILVERSTONE_BOOTSTRAP_PHONE || "").trim();
 const password = process.env.SILVERSTONE_BOOTSTRAP_PASSWORD || "";
 
-if (!databaseUrl) fail("SILVERSTONE_DATABASE_URL is required.");
+if (!databaseUrl) fail("SILVERSTONE_DATABASE_URL or DATABASE_URL is required.");
 if (allowRemote && !allowRemoteBootstrap)
   fail(
     "Remote main-agent bootstrap is disabled. Set SILVERSTONE_ALLOW_REMOTE_BOOTSTRAP=true only for the intentional one-time bootstrap run.",
@@ -38,7 +38,6 @@ const db = connectDatabase(databaseUrl, { allowRemote });
 try {
   await db.query("SELECT name FROM ss_v1.schema_migrations LIMIT 1");
   const result = await db.transaction(async (tx) => {
-    // Serialize all bootstrap attempts, including simultaneous operator runs.
     await tx.query(
       "SELECT pg_advisory_xact_lock(hashtext('silverstone-main-agent-bootstrap'))",
     );
