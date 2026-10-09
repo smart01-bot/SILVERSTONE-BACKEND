@@ -162,5 +162,11 @@ export function createHostedAuthRouter({ db, secret, credentials }) {
     },
   );
 
+  // Normalize authentication middleware failures too; never leak Express HTML/errors.
+  router.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    sendError(error, req, res);
+  });
+
   return router;
 }
