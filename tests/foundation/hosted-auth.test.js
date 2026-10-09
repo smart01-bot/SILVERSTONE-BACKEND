@@ -14,7 +14,9 @@ const password = "HostedPassphrase123!";
 
 function fakeCredentials() {
   const users = new Map();
+  const recoveries = [];
   return {
+    recoveries,
     async signUp(email, suppliedPassword) {
       if (users.has(email))
         throw new ApiError(409, "ACCOUNT_CONFLICT", "Account already exists.");
@@ -31,6 +33,10 @@ function fakeCredentials() {
           "Incorrect email or password.",
         );
       return { id: user.id, email };
+    },
+    async recover(email) {
+      recoveries.push(email);
+      return { accepted: true };
     },
   };
 }
@@ -58,6 +64,18 @@ test("hosted Supabase credential bridge preserves Silverstone state and sessions
   assert.equal(registration.status, 201);
   assert.equal(registration.body.data.agent.accountStatus, "pending");
   assert.equal(registration.body.data.agent.applicationStatus, "draft");
+
+  const recovery = await request(app).post("/api/v1/auth/recovery").send({
+    email: "HOSTED@example.test",
+  });
+  assert.equal(recovery.status, 200);
+  assert.equal(recovery.body.data.accepted, true);
+  assert.deepEqual(credentials.recoveries, ["hosted@example.test"]);
+
+  const invalidRecovery = await request(app).post("/api/v1/auth/recovery").send({
+    email: "not-an-email",
+  });
+  assert.equal(invalidRecovery.status, 400);
 
   const stored = (
     await db.query(
