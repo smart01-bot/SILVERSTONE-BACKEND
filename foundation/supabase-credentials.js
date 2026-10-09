@@ -15,7 +15,7 @@ export function createSupabaseCredentialProvider({
   if (typeof fetchImpl !== "function")
     throw new Error("A fetch implementation is required for Supabase Auth.");
 
-  async function request(path, body, invalidMessage) {
+  async function post(path, body) {
     let response;
     try {
       response = await fetchImpl(`${baseUrl}/auth/v1/${path}`, {
@@ -41,6 +41,11 @@ export function createSupabaseCredentialProvider({
     } catch {
       // Keep provider responses out of API errors.
     }
+    return { response, payload };
+  }
+
+  async function request(path, body, invalidMessage) {
+    const { response, payload } = await post(path, body);
 
     if (!response.ok || !payload?.user?.id) {
       const status = response.status === 400 || response.status === 401 ? 401 : 503;
@@ -73,6 +78,16 @@ export function createSupabaseCredentialProvider({
         { email, password },
         "Unable to create this account with those credentials.",
       );
+    },
+    async recover(email) {
+      const { response } = await post("recover", { email });
+      if (!response.ok)
+        throw new ApiError(
+          503,
+          "AUTH_PROVIDER_UNAVAILABLE",
+          "Unable to send a recovery email right now. Please try again later.",
+        );
+      return { accepted: true };
     },
   };
 }
