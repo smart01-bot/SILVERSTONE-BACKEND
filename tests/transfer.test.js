@@ -1,17 +1,81 @@
-import request from 'supertest';
-import app from '../app.js';
-import { db, seedAgent, seedNetworks } from './support/services.js';
+import supertest from 'supertest';
+import jwt from 'jsonwebtoken';
+import { createServer } from 'http';
+import app from '../index.js';
+import db from '../config/database.js';
+import redis from '../config/redis.js';
+import { createAgent } from '../models/agent.js';
+import { createRequest } from '../models/request.js';
+import { processTransfer } from '../services/transferService.js';
+import bcrypt from 'bcrypt';
 
-it('reads actual legs and refuses fake completion or financial mutations', async () => {
-  const owner = await seedAgent(); const other = await seedAgent(); const { from, to } = await seedNetworks();
-  const row = await db.one('INSERT INTO public.transfer_requests (sub_agent_id,amount,origin_network_id,origin_account_identifier,destination_network_id,destination_account_identifier) VALUES ($1,100,$2,$3,$4,$5) RETURNING *', [owner.id, from.id, 'origin', to.id, 'dest']);
-  const leg = await db.one("INSERT INTO public.transaction_legs (request_id,leg_type,network_id,amount) VALUES ($1,'origin_in',$2,100) RETURNING *", [row.id, from.id]);
-  const login = async agent => `Bearer ${(await request(app).post('/api/auth/login').send({ phone_number: agent.phone_number, pin: '123456' })).body.token}`;
-  const token = await login(owner);
-  const detail = await request(app).get(`/api/transfers/${leg.id}`).set('Authorization', token);
-  expect(detail.status).toBe(200); expect(detail.body[0].leg_type).toBe('origin_in');
-  expect((await request(app).get(`/api/transfers/${leg.id}`).set('Authorization', await login(other))).status).toBe(404);
-  expect((await request(app).post('/api/transfers/process').set('Authorization', token).send({ requestId: row.id })).status).toBe(503);
-  expect((await db.one('SELECT * FROM public.transfer_requests WHERE id=$1', [row.id])).status).toBe('pending_pin');
-  expect((await db.one('SELECT * FROM public.transaction_legs WHERE id=$1', [leg.id])).confirmed_at).toBeNull();
+const request = supertest(createServer(app));
+
+describe('Transfer Processing', () => {
+  let token;
+  let agentId;
+
+  beforeAll(async () => {
+    await db.none('DELETE FROM transactions');
+    await db.none('DELETE FROM requests');
+    await db.none('DELETE FROM agents');
+    await redis.flushAll();
+    const agent = await createAgent(
+      'transferagent', 'Test Agent', 'transferagent@example.com', '1234567890',
+      ['Vodacom'], [], 'main-agent', await bcrypt.hash('password', 10),
+      null, null, null, null, null, null, 0, null, null, false
+    );
+    agentId = agent.id;
+    token = jwt.sign({ id: agent.id, role: 'main-agent' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  });
+
+  afterAll(async () => {
+    await db.none('DELETE FROM transactions');
+    await db.none('DELETE FROM requests');
+    await db.none('DELETE FROM agents');
+    await redis.flushAll();
+    await redis.quit();
+    await db.$pool.end();
+  });
+
+  describe('POST /api/transfers/process', () => {
+    it('should process same-network transfer', async () => {
+      const requestData = await createRequest(agentId, 'Test Agent', 'Vodacom', 'Vodacom', '1234567890', '0987654321', 100000, false);
+      const response = await request.post('/api/transfers/process')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ requestId: requestData.id });
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('completed');
+      const transaction = await db.oneOrNone('SELECT * FROM transactions WHERE request_id = $1', [requestData.id]);
+      expect(transaction).toBeDefined();
+    });
+
+    it('should process cross-network transfer', async () => {
+      const requestData = await createRequest(agentId, 'Test Agent', 'Vodacom', 'Airtel', '1234567890', '0987654321', 100000, false);
+      const response = await request.post('/api/transfers/process')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ requestId: requestData.id });
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('awaiting_confirmation');
+    });
+
+    it('should fail with a request ID that does not exist', async () => {
+      // Must be a well-formed UUID -- the route validates format with isUUID()
+      // before the controller ever looks the row up, so a non-UUID value like
+      // 999 would 400 on validation rather than exercise the "not found" path.
+      const response = await request.post('/api/transfers/process')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ requestId: '00000000-0000-0000-0000-000000000000' });
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Request not found');
+    });
+  });
+
+  describe('processTransfer', () => {
+    it('should handle same-network transfer', async () => {
+      const requestData = await createRequest(agentId, 'Test Agent', 'Vodacom', 'Vodacom', '1234567890', '0987654321', 100000, false);
+      const result = await processTransfer(requestData.id);
+      expect(result.status).toBe('completed');
+    });
+  });
 });

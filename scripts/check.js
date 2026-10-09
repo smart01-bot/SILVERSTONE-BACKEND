@@ -1,23 +1,28 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
-const files = ['app.js', 'index.js', 'jest.config.js'];
-for (const directory of ['config', 'controllers', 'middleware', 'models', 'routes', 'services', 'scripts']) {
-  for (const name of await readdir(directory)) if (name.endsWith('.js')) files.push(`${directory}/${name}`);
+import { readdir, readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+const paths = ["index.js"];
+for (const directory of ["foundation", "scripts", "tests/foundation"]) {
+  for (const name of await readdir(directory))
+    if (name.endsWith(".js")) paths.push(`${directory}/${name}`);
 }
-for (const file of files) {
-  if (spawnSync(process.execPath, ['--check', file], { stdio: 'inherit' }).status !== 0) process.exit(1);
+for (const path of paths) {
+  const result = spawnSync(process.execPath, ["--check", path], {
+    stdio: "inherit",
+  });
+  if (result.status !== 0) process.exit(result.status || 1);
 }
+// Resolve every static relative import in the active server graph (legacy not reachable).
 const visited = new Set();
 async function visit(url) {
   if (visited.has(url.href)) return;
   visited.add(url.href);
-  const source = await readFile(url, 'utf8');
-  for (const match of source.matchAll(/(?:from\s+|import\s*)['"](\.[^'"]+)['"]/g)) {
-    const child = new URL(match[1], url);
-    if (child.pathname.endsWith('.js')) await visit(child);
-  }
+  const text = await readFile(url, "utf8");
+  for (const match of text.matchAll(/(?:from\s+|import\s*)['"](\.[^'"]+)['"]/g))
+    await visit(new URL(match[1], url));
 }
-await visit(new URL('../app.js', import.meta.url));
-// Only app.js is imported: no listener, database connection or Redis connection.
-await import('../app.js');
-console.log(`Syntax checked ${files.length} files; active app graph ${visited.size} files loaded without startup.`);
+await visit(new URL("../index.js", import.meta.url));
+await import("../index.js");
+console.log(
+  `Syntax: ${paths.length} files. Active server import graph: ${visited.size} files. Import caused no startup.`,
+);

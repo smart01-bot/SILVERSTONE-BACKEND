@@ -6,11 +6,13 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --runInBand",
+    "test": "node --test tests/foundation/*.test.js",
     "lint": "node scripts/check.js",
-    "format": "prettier --write config controllers middleware models routes services scripts tests app.js index.js",
-    "check:connectivity": "node scripts/check-connectivity.js",
-    "build": "node scripts/check.js"
+    "format": "prettier --write foundation scripts tests/foundation",
+    "build": "node scripts/check.js",
+    "db:migrate": "node scripts/migrate.js",
+    "bootstrap:main-agent": "node scripts/bootstrap-main-agent.js",
+    "dev:isolated": "node scripts/isolated.js"
   },
   "keywords": [],
   "author": "",
@@ -34,14 +36,11 @@
     "winston": "^3.17.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "eslint": "^9.33.0",
     "jest": "^30.0.5",
     "nodemon": "^3.1.10",
-    "pg-mem": "^3.0.14",
     "prettier": "^3.6.2",
     "supertest": "^7.1.4"
-  },
-  "engines": {
-    "node": "24.x"
   }
 }

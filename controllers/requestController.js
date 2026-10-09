@@ -1,35 +1,114 @@
-import { createRequest, getAllRequestsData, getRequestById, canReadRequest, resolveNetwork } from '../models/request.js';
-export const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-export const submitRequest = async (req, res, next) => {
+import { createRequest, deleteRequestData, getAllRequestsData, getRequestById, updateRequestData } from '../models/request.js';
+import { addToQueue, getQueuePosition } from '../services/queueService.js';
+import { check, validationResult } from 'express-validator';
+import { NETWORKS, REQUEST_STATUSES } from '../utils/constants.js';
+
+const submitRequest = async (req, res, next) => {
   try {
-    if (req.user.role !== 'sub-agent') return res.status(403).json({ error: 'Sub-agent access required' });
-    const b = req.body;
-    const origin = b.origin_network_id ?? b.source_network;
-    const destination = b.destination_network_id ?? b.requested_network;
-    const originAccount = b.origin_account_identifier ?? b.source_phoneNumber;
-    const destinationAccount = b.destination_account_identifier ?? b.requested_phoneNumber;
-    const amount = String(b.amount ?? '');
-    if (![origin, destination, originAccount, destinationAccount].every(v => typeof v === 'string' && v.trim() && v.length <= 128)
-      || !/^\d{1,15}(\.\d{1,2})?$/.test(amount) || Number(amount) <= 0 || b.urgency === true) {
-      return res.status(400).json({ error: 'Provide valid networks, account identifiers and a positive amount; urgency is unsupported by this schema' });
+    // Derived from the verified JWT, never from client input -- a sub-agent
+    // must not be able to submit a request tagged under a different agent's ID.
+    const subAgentId = req.user.id;
+    const { subagent_name, requested_network, source_network, requested_phoneNumber, source_phoneNumber, amount, urgency = false } = req.body;
+
+    await Promise.all([
+      check('subagent_name').isString().notEmpty().run(req),
+      check('requested_network').isString().isIn(NETWORKS).run(req),
+      check('source_network').optional().isString().isIn(NETWORKS).run(req),
+      check('requested_phoneNumber').isString().notEmpty().run(req),
+      check('source_phoneNumber').optional().isString().run(req),
+      check('amount').isFloat({ min: 0 }).run(req),
+      check('urgency').isBoolean().run(req),
+    ]);
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    const [from, to] = await Promise.all([resolveNetwork(origin), resolveNetwork(destination)]);
-    if (!from || !to || from.id === to.id) return res.status(400).json({ error: 'Choose two different active networks' });
-    const request = await createRequest(req.user.id, amount, from.id, originAccount.trim(), to.id, destinationAccount.trim());
-    // The database default pending_pin is preserved. No queue/payment execution.
-    res.status(201).json({ request });
-  } catch (error) { next(error); }
+
+    const request = await createRequest(subAgentId, subagent_name, requested_network, source_network, requested_phoneNumber, source_phoneNumber, amount, urgency);
+    const priorityScore = Date.now() + (urgency ? 1000000 : 0);
+    await addToQueue(request.id, priorityScore);
+    const position = await getQueuePosition(request.id);
+
+    res.status(201).json({ request, queuePosition: position });
+  } catch (error) {
+    next(error);
+  }
 };
-export const getAllRequests = async (req, res, next) => {
-  try { res.json(await getAllRequestsData(req.user)); } catch (error) { next(error); }
-};
-export const getSingleRequest = async (req, res, next) => {
+
+const getSingleRequest = async (req, res, next) => {
   try {
-    if (!uuid(req.params.id)) return res.status(400).json({ error: 'Invalid request ID' });
-    const request = await getRequestById(req.params.id);
-    if (!canReadRequest(req.user, request)) return res.status(404).json({ error: 'Request not found' });
-    res.json([request]);
-  } catch (error) { next(error); }
+    const { id } = req.params;
+    await check('id').isUUID().run(req);
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const request = await getRequestById(id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    res.status(200).json([request]);
+  } catch (error) {
+    next(error);
+  }
 };
-export const updateRequest = (req, res) => res.status(503).json({ error: 'Request lifecycle changes require the verified transfer workflow' });
-export const deleteRequest = updateRequest;
+
+const getAllRequests = async (req, res, next) => {
+  try {
+    const requests = await getAllRequestsData();
+    res.status(200).json(requests);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateRequest = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { subagent_name, requested_network, source_network, requested_phoneNumber, source_phoneNumber, amount, urgency, status } = req.body;
+
+    await Promise.all([
+      check('id').isUUID().run(req),
+      check('subagent_name').optional().isString().notEmpty().run(req),
+      check('requested_network').optional().isString().isIn(NETWORKS).run(req),
+      check('source_network').optional().isString().isIn(NETWORKS).run(req),
+      check('requested_phoneNumber').optional().isString().run(req),
+      check('source_phoneNumber').optional().isString().run(req),
+      check('amount').optional().isFloat({ min: 0 }).run(req),
+      check('urgency').optional().isBoolean().run(req),
+      check('status').optional().isIn(REQUEST_STATUSES).run(req),
+    ]);
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const updatedRequest = await updateRequestData(id, subagent_name, requested_network, source_network, requested_phoneNumber, source_phoneNumber, amount, urgency, status);
+
+    res.status(200).json([updatedRequest]);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteRequest = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await check('id').isUUID().run(req);
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    await deleteRequestData(id);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { submitRequest, getSingleRequest, getAllRequests, updateRequest, deleteRequest };

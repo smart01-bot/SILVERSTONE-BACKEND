@@ -1,5 +1,6 @@
-.env
-
 node_modules/
+.env
+.env.*
+!.env.example
 coverage/
-logs/
+.local/

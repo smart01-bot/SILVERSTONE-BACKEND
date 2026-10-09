@@ -1,45 +1,69 @@
-import { safeDiagnostic } from './config/diagnostics.js';
-import { verifyPublicSchema } from './config/schema.js';
-import app from './app.js';
-import db from './config/database.js';
-import redis from './config/redis.js';
+import "dotenv/config";
+import express from "express";
+import { pathToFileURL } from "node:url";
+import { createApp } from "./foundation/app.js";
+import { connectDatabase } from "./foundation/database.js";
+import {
+  connectRedisRateLimitStore,
+  createRateLimitMiddleware,
+} from "./foundation/rate-limit.js";
+export { createApp };
 
-let server;
-async function shutdown() {
-  app.locals.dependenciesReady = false;
-  if (server) await new Promise(resolve => server.close(resolve));
-  if (redis.isOpen) await redis.quit();
-  await db.$pool.end();
-}
+const enabled = (value) => value === "true";
 
-let startupStage = 'configuration';
-try {
-  if (!process.env.JWT_SECRET) throw Object.assign(new Error('Missing JWT_SECRET'), { code: 'MISSING_JWT_SECRET' });
-  if (process.env.ENABLE_QUEUE_WORKER === 'true') throw Object.assign(new Error('Legacy worker is incompatible'), { code: 'LEGACY_WORKER_DISABLED' });
-  startupStage = 'PostgreSQL connection/TLS';
-  await db.one('SELECT 1 AS ok');
-  startupStage = 'public schema readiness';
-  await verifyPublicSchema(db);
-  startupStage = 'Redis TLS';
-  await redis.connect();
-  await redis.ping();
-  const port = process.env.PORT || 8800;
-  app.locals.checkDependencies = () => Promise.all([
-    db.one('SELECT 1 AS ok'),
-    redis.withCommandOptions({ abortSignal: AbortSignal.timeout(10000) }).ping(),
-  ]);
-  app.locals.dependenciesReady = true;
-  server = app.listen(port, '0.0.0.0', () => console.log(`SERVER RUNNING ON PORT ${port}`));
-  server.on('error', async () => {
-    console.error('HTTP server failed to start');
-    await shutdown();
+// Importing this file never listens, connects, migrates, or starts a worker.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const databaseUrl = process.env.SILVERSTONE_DATABASE_URL || process.env.DATABASE_URL;
+  const jwtSecret = process.env.SILVERSTONE_JWT_SECRET || process.env.JWT_SECRET;
+  const allowRemote = enabled(process.env.SILVERSTONE_ALLOW_REMOTE_DATABASE);
+  const db = connectDatabase(databaseUrl, { allowRemote });
+  let closeRateLimitStore = async () => {};
+  try {
+    await db.query("SELECT name FROM ss_v1.schema_migrations");
+
+    const redis = await connectRedisRateLimitStore(process.env);
+    closeRateLimitStore = redis.close;
+    const sharedLimit = createRateLimitMiddleware({
+      limit: Number(process.env.SILVERSTONE_RATE_LIMIT || 30),
+      store: redis.store,
+    });
+
+    const core = createApp({
+      db,
+      secret: jwtSecret,
+      // Hosted traffic is limited by the shared wrapper below. Keep this high to
+      // avoid counting the same authentication request twice.
+      rateLimit: allowRemote ? 1_000_000 : 30,
+    });
+    const app = express();
+    if (allowRemote) app.set("trust proxy", 1);
+    app.use((req, res, next) => {
+      const limited =
+        req.path.startsWith("/api/v1/auth") ||
+        (req.path === "/api/v1/documents" && req.method === "POST");
+      return limited ? sharedLimit(req, res, next) : next();
+    });
+    app.use(core);
+
+    const port = Number(process.env.PORT || 8800);
+    const host = process.env.HOST || (allowRemote ? "0.0.0.0" : "127.0.0.1");
+    const server = app.listen(port, host, () =>
+      console.log(
+        `Silverstone API listening on ${host}:${port}; payments disabled; shared rate limit ${redis.store ? "enabled" : "using local fallback"}.`,
+      ),
+    );
+    for (const signal of ["SIGINT", "SIGTERM"])
+      process.on(signal, () =>
+        server.close(async () => {
+          await closeRateLimitStore().catch(() => {});
+          await db.close();
+          process.exit(0);
+        }),
+      );
+  } catch (error) {
+    await closeRateLimitStore().catch(() => {});
+    await db.close();
+    console.error("Startup failed:", error.message);
     process.exitCode = 1;
-  });
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.once(signal, async () => { await shutdown(); });
   }
-} catch (error) {
-  console.error(`Backend startup failed at ${startupStage}: ${JSON.stringify(safeDiagnostic(error))}`);
-  await shutdown();
-  process.exitCode = 1;
 }

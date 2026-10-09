@@ -7,20 +7,17 @@ const client = createClient({
     password: process.env.REDIS_PASSWORD,
     socket: {
         host: process.env.REDIS_HOST,
-        port: Number(process.env.REDIS_PORT || 6379),
-        connectTimeout: 10000,
-        reconnectStrategy: false,
+        port: process.env.REDIS_PORT,
         tls: true,
-        rejectUnauthorized: true,
     }
 });
 
-client.on('error', () => console.error('Redis connection error'));
+client.on('error', err => console.log('❌ Redis Client Error', err));
 
 client.on("ready", () => {
   console.log("✅ Redis client connected and ready to use!");
 });
 
-// Connection is initiated explicitly by index.js.
+await client.connect();
 
 export default client;
