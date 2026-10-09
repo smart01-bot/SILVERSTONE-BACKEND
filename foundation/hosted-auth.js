@@ -131,6 +131,24 @@ export function createHostedAuthRouter({ db, secret, credentials }) {
     }
   });
 
+  router.post("/api/v1/auth/recovery", async (req, res) => {
+    try {
+      allowFields(req.body, ["email"]);
+      const email = normalizeEmail(req.body.email);
+      if (!EMAIL.test(email) || email.length > 254)
+        throw invalid("Enter a valid email address.");
+
+      await credentials.recover(email);
+      ok(res, {
+        accepted: true,
+        message:
+          "If an account exists for that email, password recovery instructions have been sent.",
+      });
+    } catch (error) {
+      sendError(error, req, res);
+    }
+  });
+
   router.post(
     "/api/v1/auth/reauthenticate",
     auth.authenticate,
