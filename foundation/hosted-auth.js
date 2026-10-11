@@ -82,7 +82,29 @@ export function createHostedAuthRouter({ db, secret, credentials }) {
           "An account with these details already exists.",
         );
 
-      const identity = await credentials.signUp(email, password);
+      // A confirmed Supabase account may exist without its Silverstone row after
+      // interrupted signup. Only a successful password sign-in can link it.
+      let identity;
+      try {
+        identity = await credentials.signIn(email, password);
+      } catch (error) {
+        if (error.code === "EMAIL_NOT_CONFIRMED") {
+          res.status(202);
+          return ok(res, { requiresEmailConfirmation: true });
+        }
+        if (error.code !== "INVALID_CREDENTIALS") throw error;
+        identity = await credentials.signUp(email, password);
+      }
+      if (identity.requiresEmailConfirmation) {
+        res.status(202);
+        return ok(res, { requiresEmailConfirmation: true });
+      }
+      if (!identity.id || identity.email !== email)
+        throw new ApiError(
+          503,
+          "AUTH_PROVIDER_UNAVAILABLE",
+          "Authentication service temporarily unavailable.",
+        );
       const row = (
         await db.query(
           `INSERT INTO ss_v1.agents(
@@ -118,7 +140,13 @@ export function createHostedAuthRouter({ db, secret, credentials }) {
           [identity.id, email],
         )
       ).rows[0];
-      if (!row || row.account_status === "closed")
+      if (!row)
+        throw new ApiError(
+          409,
+          "REGISTRATION_REQUIRED",
+          "Your email is confirmed. Return to registration to finish creating your Silverstone account.",
+        );
+      if (row.account_status === "closed")
         throw new ApiError(
           401,
           "INVALID_CREDENTIALS",
@@ -168,11 +196,7 @@ export function createHostedAuthRouter({ db, secret, credentials }) {
           verified = await checkPassword(password, req.agent.password_hash);
         }
         if (!verified)
-          throw new ApiError(
-            401,
-            "INVALID_CREDENTIALS",
-            "Incorrect password.",
-          );
+          throw new ApiError(401, "INVALID_CREDENTIALS", "Incorrect password.");
         ok(res, { verified: true });
       } catch (error) {
         sendError(error, req, res);

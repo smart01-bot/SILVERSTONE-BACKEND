@@ -44,20 +44,50 @@ export function createSupabaseCredentialProvider({
     return { response, payload };
   }
 
+  function providerError(response, payload, invalidMessage) {
+    if (payload?.error_code === "email_not_confirmed")
+      return new ApiError(
+        403,
+        "EMAIL_NOT_CONFIRMED",
+        "Confirm your email before signing in. Check your inbox and spam folder.",
+      );
+    if (response.status === 429)
+      return new ApiError(
+        429,
+        "AUTH_RATE_LIMITED",
+        "Too many authentication attempts. Please wait before trying again.",
+      );
+    if (payload?.error_code === "user_already_exists")
+      return new ApiError(
+        409,
+        "ACCOUNT_CONFLICT",
+        "An account with these details already exists. Sign in or recover your password.",
+      );
+    if (payload?.error_code === "weak_password")
+      return new ApiError(
+        400,
+        "INVALID_PASSWORD",
+        "Choose a stronger password and try again.",
+      );
+    const invalid = response.status === 400 || response.status === 401;
+    return new ApiError(
+      invalid ? 401 : 503,
+      invalid ? "INVALID_CREDENTIALS" : "AUTH_PROVIDER_UNAVAILABLE",
+      invalid
+        ? invalidMessage
+        : "Authentication service temporarily unavailable.",
+    );
+  }
+
   async function request(path, body, invalidMessage) {
     const { response, payload } = await post(path, body);
-
-    if (!response.ok || !payload?.user?.id) {
-      const status = response.status === 400 || response.status === 401 ? 401 : 503;
+    if (!response.ok) throw providerError(response, payload, invalidMessage);
+    if (!payload?.user?.id || !payload.access_token)
       throw new ApiError(
-        status,
-        status === 401 ? "INVALID_CREDENTIALS" : "AUTH_PROVIDER_UNAVAILABLE",
-        status === 401
-          ? invalidMessage
-          : "Authentication service temporarily unavailable.",
+        503,
+        "AUTH_PROVIDER_UNAVAILABLE",
+        "Authentication service temporarily unavailable.",
       );
-    }
-
     return {
       id: payload.user.id,
       email: String(payload.user.email || "").toLowerCase(),
@@ -73,11 +103,27 @@ export function createSupabaseCredentialProvider({
       );
     },
     async signUp(email, password) {
-      return request(
-        "signup",
-        { email, password },
-        "Unable to create this account with those credentials.",
-      );
+      const { response, payload } = await post("signup", { email, password });
+      if (!response.ok)
+        throw providerError(
+          response,
+          payload,
+          "Unable to create this account with those credentials.",
+        );
+      // GoTrue returns a bare user while awaiting confirmation, including obfuscated
+      // users for existing accounts. Never link that ID or issue a Silverstone session.
+      if ((payload?.id || payload?.user?.id) && !payload.access_token)
+        return { requiresEmailConfirmation: true };
+      if (!payload?.user?.id || !payload.access_token)
+        throw new ApiError(
+          503,
+          "AUTH_PROVIDER_UNAVAILABLE",
+          "Authentication service temporarily unavailable.",
+        );
+      return {
+        id: payload.user.id,
+        email: String(payload.user.email || "").toLowerCase(),
+      };
     },
     async recover(email) {
       const { response } = await post("recover", { email });

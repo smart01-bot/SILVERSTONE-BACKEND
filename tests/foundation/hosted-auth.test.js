@@ -72,9 +72,11 @@ test("hosted Supabase credential bridge preserves Silverstone state and sessions
   assert.equal(recovery.body.data.accepted, true);
   assert.deepEqual(credentials.recoveries, ["hosted@example.test"]);
 
-  const invalidRecovery = await request(app).post("/api/v1/auth/recovery").send({
-    email: "not-an-email",
-  });
+  const invalidRecovery = await request(app)
+    .post("/api/v1/auth/recovery")
+    .send({
+      email: "not-an-email",
+    });
   assert.equal(invalidRecovery.status, 400);
 
   const stored = (
@@ -147,9 +149,10 @@ test("hosted Supabase credential bridge preserves Silverstone state and sessions
     200,
   );
 
-  await db.query("UPDATE ss_v1.agents SET account_status='suspended' WHERE id=$1", [
-    stored.id,
-  ]);
+  await db.query(
+    "UPDATE ss_v1.agents SET account_status='suspended' WHERE id=$1",
+    [stored.id],
+  );
   assert.equal(
     (
       await request(app)
@@ -159,13 +162,95 @@ test("hosted Supabase credential bridge preserves Silverstone state and sessions
     403,
   );
 
-  await db.query("UPDATE ss_v1.agents SET account_status='closed' WHERE id=$1", [
-    stored.id,
-  ]);
+  await db.query(
+    "UPDATE ss_v1.agents SET account_status='closed' WHERE id=$1",
+    [stored.id],
+  );
   const closed = await request(app).post("/api/v1/auth/login").send({
     email: "hosted@example.test",
     password,
   });
   assert.equal(closed.status, 401);
   assert.equal(closed.body.error.code, "INVALID_CREDENTIALS");
+});
+
+test("confirmation creates no app session; verified retry repairs partial registration", async (t) => {
+  const db = await embeddedDatabase();
+  t.after(() => db.close());
+  await migrate(db);
+  let exists = false,
+    confirmed = false,
+    signups = 0;
+  const identity = { id: randomUUID(), email: "confirmation@example.test" };
+  const credentials = {
+    async signIn(email, supplied) {
+      if (!exists || supplied !== password)
+        throw new ApiError(
+          401,
+          "INVALID_CREDENTIALS",
+          "Incorrect credentials.",
+        );
+      if (!confirmed)
+        throw new ApiError(403, "EMAIL_NOT_CONFIRMED", "Confirm email.");
+      return identity;
+    },
+    async signUp() {
+      exists = true;
+      signups++;
+      return { requiresEmailConfirmation: true };
+    },
+  };
+  const app = express();
+  app.use(createHostedAuthRouter({ db, secret, credentials }));
+  const body = {
+    email: identity.email,
+    password,
+    name: "Synthetic Applicant",
+    phone: "+255700002099",
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await request(app).post("/api/v1/auth/register").send(body);
+    assert.equal(result.status, 202);
+    assert.deepEqual(result.body.data, { requiresEmailConfirmation: true });
+  }
+  assert.equal(signups, 1);
+  assert.equal(
+    (await db.query("SELECT count(*)::int AS n FROM ss_v1.agents")).rows[0].n,
+    0,
+  );
+  assert.equal(
+    (await db.query("SELECT count(*)::int AS n FROM ss_v1.sessions")).rows[0].n,
+    0,
+  );
+  const unconfirmed = await request(app)
+    .post("/api/v1/auth/login")
+    .send({ email: identity.email, password });
+  assert.equal(unconfirmed.body.error.code, "EMAIL_NOT_CONFIRMED");
+  confirmed = true;
+  const incomplete = await request(app)
+    .post("/api/v1/auth/login")
+    .send({ email: identity.email, password });
+  assert.equal(incomplete.body.error.code, "REGISTRATION_REQUIRED");
+  // Wrong credentials must not claim an existing Supabase identity.
+  const wrong = await request(app)
+    .post("/api/v1/auth/register")
+    .send({ ...body, password: "DifferentSyntheticPassword" });
+  assert.equal(wrong.status, 202);
+  assert.equal(
+    (await db.query("SELECT count(*)::int AS n FROM ss_v1.agents")).rows[0].n,
+    0,
+  );
+  const completed = await request(app).post("/api/v1/auth/register").send(body);
+  assert.equal(completed.status, 201);
+  assert.equal(completed.body.data.agent.accountStatus, "pending");
+  assert.equal(
+    (await db.query("SELECT auth_user_id FROM ss_v1.agents")).rows[0]
+      .auth_user_id,
+    identity.id,
+  );
+  const duplicate = await request(app)
+    .post("/api/v1/auth/register")
+    .send({ ...body, email: "different@example.test" });
+  assert.equal(duplicate.status, 409);
+  assert.equal(duplicate.body.error.code, "ACCOUNT_CONFLICT");
 });
