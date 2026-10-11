@@ -1,10 +1,10 @@
-name: Backend development CI
+name: Backend CI
 
 on:
   push:
-    branches: [development]
+    branches: [Main-Implementation, Development]
   pull_request:
-    branches: [development]
+    branches: [Main-Implementation, Development]
 
 permissions:
   contents: read
