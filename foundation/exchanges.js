@@ -1,4 +1,13 @@
-import { operationGate } from './operations.js';
+import { paymentEndpoint } from "./payment-endpoints.js";
+import {
+  realPayment,
+  paymentSchema,
+  paymentDetail,
+  reservePayment,
+  closePayment,
+} from "./payments.js";
+import { paymentProviders } from "./payment-providers.js";
+import { operationGate } from "./operations.js";
 import { randomUUID, createHash } from "node:crypto";
 import { ApiError, invalid, allowFields, uuid } from "./errors.js";
 import { active } from "./auth.js";
@@ -137,6 +146,7 @@ async function detail(tx, row) {
     providerEvidence: await providerEvidenceDTO(tx, row.id),
     silverstoneFeeTzs: "0",
     providerExecutionEnabled: false,
+    ...(realPayment(row) ? await paymentDetail(tx, row) : {}),
   };
 }
 async function scoped(db, actor, id) {
@@ -151,7 +161,7 @@ async function scoped(db, actor, id) {
   if (!row) throw missing();
   return row;
 }
-export function mountExchanges(app, db) {
+export function mountExchanges(app, db, providers = paymentProviders) {
   app.get("/api/v1/me/accounts", active, async (req, res) => {
     const rows = (
       await db.query(
@@ -200,6 +210,9 @@ export function mountExchanges(app, db) {
     res.status(201).json({ data: accountDTO(row) });
   });
   app.post("/api/v1/requests", active, async (req, res) => {
+    if (req.body?.source || req.body?.destination) {
+      return createPaymentRequest(db, req, res);
+    }
     allowFields(req.body, [
       "sourceAccountId",
       "destinationAccountId",
@@ -408,36 +421,42 @@ export function mountExchanges(app, db) {
                 throw conflict(
                   "Only requests awaiting review can be accepted.",
                 );
-              const accounts = (
-                await tx.query(
-                  "SELECT * FROM ss_v1.network_accounts WHERE id IN ($1,$2,$3,$4) ORDER BY id FOR UPDATE",
-                  [
-                    row.source_account_id,
-                    row.destination_account_id,
-                    row.collection_account_id,
-                    row.payout_account_id,
-                  ],
-                )
-              ).rows;
-              if (accounts.length !== 4 || !accounts.every(synthetic))
-                throw conflict("Account verification changed.");
-              const capacity = await tx.query(
-                `UPDATE ss_v1.exchange_capacity SET held_tzs=held_tzs+$2 WHERE account_id=$1 AND source='synthetic_fixture' AND total_tzs-held_tzs >= $2 RETURNING account_id`,
-                [row.payout_account_id, String(row.amount_tzs)],
-              );
-              if (!capacity.rows.length)
-                throw conflict(
-                  "Insufficient available synthetic capacity.",
-                  "INSUFFICIENT_CAPACITY",
+              if (realPayment(row)) {
+                await reservePayment(tx, row, providers);
+              } else {
+                const accounts = (
+                  await tx.query(
+                    "SELECT * FROM ss_v1.network_accounts WHERE id IN ($1,$2,$3,$4) ORDER BY id FOR UPDATE",
+                    [
+                      row.source_account_id,
+                      row.destination_account_id,
+                      row.collection_account_id,
+                      row.payout_account_id,
+                    ],
+                  )
+                ).rows;
+                if (accounts.length !== 4 || !accounts.every(synthetic))
+                  throw conflict("Account verification changed.");
+                const capacity = await tx.query(
+                  `UPDATE ss_v1.exchange_capacity SET held_tzs=held_tzs+$2 WHERE account_id=$1 AND source='synthetic_fixture' AND total_tzs-held_tzs >= $2 RETURNING account_id`,
+                  [row.payout_account_id, String(row.amount_tzs)],
                 );
-              await tx.query(
-                "INSERT INTO ss_v1.exchange_reservations(request_id,account_id,amount_tzs,status) VALUES($1,$2,$3,'held')",
-                [row.id, row.payout_account_id, String(row.amount_tzs)],
-              );
-              await tx.query(
-                "INSERT INTO ss_v1.exchange_jobs(id,request_id,kind,status) VALUES($1,$2,'prepare_collection','ready')",
-                [randomUUID(), row.id],
-              );
+                if (!capacity.rows.length)
+                  throw conflict(
+                    "Insufficient available synthetic capacity.",
+                    "INSUFFICIENT_CAPACITY",
+                  );
+                await tx.query(
+                  "INSERT INTO ss_v1.exchange_reservations(request_id,account_id,amount_tzs,status) VALUES($1,$2,$3,'held')",
+                  [row.id, row.payout_account_id, String(row.amount_tzs)],
+                );
+                await tx.query(
+                  "INSERT INTO ss_v1.exchange_jobs(id,request_id,kind,status) VALUES($1,$2,'prepare_collection','ready')",
+                  [randomUUID(), row.id],
+                );
+              }
+            } else if (realPayment(row)) {
+              await closePayment(tx, row);
             } else {
               if (!["awaiting_review", "awaiting_source"].includes(row.status))
                 throw conflict("This request cannot safely be closed.");
@@ -496,7 +515,9 @@ export function mountExchanges(app, db) {
               action,
               reason.trim() ||
                 (action === "accept"
-                  ? "Synthetic capacity reserved; provider disabled."
+                  ? realPayment(row)
+                    ? "Agency funding reserved; collection queued."
+                    : "Synthetic capacity reserved; provider disabled."
                   : "Cancelled before any movement."),
             );
             return detail(tx, updated);
@@ -635,4 +656,118 @@ export async function finishExchangeJob(
     );
     return { status, providerExecutionEnabled: false };
   });
+}
+
+async function createPaymentRequest(db, req, res) {
+  allowFields(req.body, [
+    "source",
+    "destination",
+    "amountTzs",
+    "currency",
+    "urgent",
+  ]);
+  const source = paymentEndpoint(req.body.source),
+    destination = paymentEndpoint(req.body.destination);
+  const { amountTzs, currency, urgent = false } = req.body;
+  if (source.networkCode === destination.networkCode)
+    throw invalid("Choose two different networks.");
+  if (
+    typeof amountTzs !== "string" ||
+    !/^[1-9]\d{0,18}$/.test(amountTzs) ||
+    BigInt(amountTzs) > 9223372036854775807n ||
+    currency !== "TZS" ||
+    typeof urgent !== "boolean"
+  )
+    throw invalid("Enter a positive whole-TZS amount.");
+  if (req.agent.role !== "sub-agent" || !req.agent.main_agent_id) throw deny();
+  await paymentSchema(db);
+  const result = await db.transaction(async (tx) => {
+    await participants(tx, req.agent.id, req.agent.main_agent_id, req.agent.id);
+    return command(
+      tx,
+      req.agent.id,
+      "create",
+      req.get("Idempotency-Key"),
+      { source, destination, amountTzs, currency, urgent },
+      async () => {
+        await operationGate(tx, req.agent.main_agent_id, "requests");
+        const save = async (endpoint) => {
+          let row = (
+            await tx.query(
+              `SELECT * FROM ss_v1.network_accounts WHERE agent_id=$1 AND network_code=$2 AND identifier_type=$3 AND identifier=$4 FOR UPDATE`,
+              [
+                req.agent.id,
+                endpoint.networkCode,
+                endpoint.identifierType,
+                endpoint.identifier,
+              ],
+            )
+          ).rows[0];
+          if (
+            row &&
+            !["unverified", "verified"].includes(row.verification_status)
+          )
+            throw conflict(
+              "This identifier is unavailable. Choose a real wallet or agent account.",
+              "ACCOUNT_UNAVAILABLE",
+            );
+          if (!row)
+            row = (
+              await tx.query(
+                `INSERT INTO ss_v1.network_accounts(id,agent_id,network_code,identifier_type,identifier) VALUES($1,$2,$3,$4,$5) RETURNING *`,
+                [
+                  randomUUID(),
+                  req.agent.id,
+                  endpoint.networkCode,
+                  endpoint.identifierType,
+                  endpoint.identifier,
+                ],
+              )
+            ).rows[0];
+          return accountDTO(row);
+        };
+        const from = await save(source),
+          to = await save(destination),
+          id = randomUUID();
+        const row = (
+          await tx.query(
+            `INSERT INTO ss_v1.transfer_requests(id,sub_agent_id,main_agent_id,source_network,destination_network,amount_tzs,currency,status,source_account_id,destination_account_id,account_snapshot,urgent)
+        VALUES($1,$2,$3,$4,$5,$6,'TZS','awaiting_review',$7,$8,$9,$10) RETURNING *`,
+            [
+              id,
+              req.agent.id,
+              req.agent.main_agent_id,
+              source.networkCode,
+              destination.networkCode,
+              amountTzs,
+              from.id,
+              to.id,
+              JSON.stringify({
+                mode: "payment",
+                source: from,
+                destination: to,
+                collection: null,
+                payout: null,
+              }),
+              urgent,
+            ],
+          )
+        ).rows[0];
+        for (const type of ["origin_in", "destination_out"])
+          await tx.query(
+            "INSERT INTO ss_v1.transaction_legs(id,request_id,leg_type) VALUES($1,$2,$3)",
+            [randomUUID(), id, type],
+          );
+        await history(
+          tx,
+          id,
+          req.agent.id,
+          "created",
+          "Real transaction endpoints recorded; awaiting main-agent review. No funds moved.",
+        );
+        return detail(tx, row);
+      },
+    );
+  });
+  res.status(201).json({ data: result });
 }

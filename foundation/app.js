@@ -1,4 +1,6 @@
-import { mountOperations } from './operations.js';
+import { mountPaymentWebhooks } from "./payments.js";
+import { paymentProviders } from "./payment-providers.js";
+import { mountOperations } from "./operations.js";
 import express from "express";
 import { providerBoundary, disabledProvider } from "./provider-boundary.js";
 import { mountExchanges } from "./exchanges.js";
@@ -18,7 +20,12 @@ import {
 } from "./errors.js";
 
 // No listeners, environment reads, workers, Firebase, Redis or connections on import.
-export function createApp({ db, secret, rateLimit = 30 }) {
+export function createApp({
+  db,
+  secret,
+  rateLimit = 30,
+  providers = paymentProviders,
+}) {
   const app = express();
   const auth = authentication(db, secret);
   const attempts = new Map();
@@ -35,6 +42,7 @@ export function createApp({ db, secret, rateLimit = 30 }) {
     res.set("X-Request-Id", req.requestId);
     next();
   });
+  mountPaymentWebhooks(app, db, providers);
   app.use((req, res, next) =>
     req.path === "/api/v1/documents" && req.method === "POST"
       ? next()
@@ -237,7 +245,7 @@ export function createApp({ db, secret, rateLimit = 30 }) {
     ok(res, agentDTO(row));
   });
   mountOperations(app, db);
-  mountExchanges(app, db);
+  mountExchanges(app, db, providers);
   app.use("/api/v1/requests", active, (req, res, next) =>
     next(
       new ApiError(

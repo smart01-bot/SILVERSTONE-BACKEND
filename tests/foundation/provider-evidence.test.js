@@ -548,12 +548,16 @@ test("Phase 4 additive upgrade preserves every populated Phase 3 table and migra
       "SELECT tablename FROM pg_tables WHERE schemaname='ss_v1' AND tablename<>'schema_migrations' ORDER BY tablename",
     )
   ).rows.map((r) => r.tablename);
-  const snapshots = {};
+  const snapshots = {}, projections = {};
+  for (const table of tables) {
+    const columns = (await db.query("SELECT column_name FROM information_schema.columns WHERE table_schema='ss_v1' AND table_name=$1 ORDER BY ordinal_position", [table])).rows;
+    projections[table] = '(SELECT ' + columns.map(c => '"'+c.column_name+'"').join(',') + ' FROM ss_v1.' + table + ')';
+  }
   for (const table of tables)
     snapshots[table] = (
       await db.query(
-        "SELECT row_to_json(t)::text value FROM ss_v1." +
-          table +
+        "SELECT row_to_json(t)::text value FROM " +
+          projections[table] +
           " t ORDER BY row_to_json(t)::text",
       )
     ).rows;
@@ -568,8 +572,8 @@ test("Phase 4 additive upgrade preserves every populated Phase 3 table and migra
     assert.deepEqual(
       (
         await db.query(
-          "SELECT row_to_json(t)::text value FROM ss_v1." +
-            table +
+          "SELECT row_to_json(t)::text value FROM " +
+            projections[table] +
             " t ORDER BY row_to_json(t)::text",
         )
       ).rows,

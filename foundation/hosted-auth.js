@@ -41,7 +41,7 @@ export function createHostedAuthRouter({ db, secret, credentials }) {
   const auth = authentication(db, secret);
   const ok = (res, data) => res.json({ data });
 
-  router.use(express.json({ limit: "32kb" }));
+  router.use("/api/v1/auth", express.json({ limit: "32kb" }));
   router.use((req, res, next) => {
     req.requestId ||= randomUUID();
     res.set("X-Request-Id", req.requestId);

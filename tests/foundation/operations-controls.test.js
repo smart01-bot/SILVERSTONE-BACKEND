@@ -308,7 +308,8 @@ test("encrypted disk-ready snapshot rejects wrong keys/corruption and preserves 
   corrupt[corrupt.length - 1] ^= 1;
   assert.throws(() => decryptBackup(corrupt, key), /authentication/);
   const { bytes, manifest } = decryptBackup(archive, key);
-  assert.equal(manifest.migrations.length, 5);
+  assert.deepEqual(manifest.migrations.map(m => m.name),
+    (await x.db.query('SELECT name FROM ss_v1.schema_migrations ORDER BY name')).rows.map(m => m.name));
   const restored = await embeddedDatabase({ snapshot: new Blob([bytes]) });
   t.after(() => restored.close());
   await migrate(restored);
