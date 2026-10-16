@@ -91,7 +91,7 @@ The integration command uses the actual frontend API client over local HTTP to E
 
 ## Runtime boundary and future work
 
-`index.js` imports only `foundation/`. The old `controllers/`, `routes/`, `models/`, `services/`, `middleware/`, `config/` and `migration.sql` remain historical, unmounted source. Their missing legacy imports are not restored with mock models. Do not run old modules/tests or mount their payment routes. Active foundation models and migrations are aligned; port/remove legacy code deliberately in later phases.
+`index.js` imports the active backend from `foundation/`. The obsolete controllers, routes, models, services, middleware, config implementation and root `migration.sql` have been removed after verification that they were outside the active server graph. Historical phase documents may still describe that legacy architecture for audit context. Active foundation models and numbered migrations remain authoritative.
 
 All exchange writes, transfers and application review are unavailable. Password recovery returns 503 until a real delivery mechanism is implemented; it never exposes reset credentials. Public applicant submission, evidence storage and approvals belong to Phase 2. Request creation, full network-account records, legs/ledger/reservations/jobs belong to Phase 3. No provider executes in this phase.
 
